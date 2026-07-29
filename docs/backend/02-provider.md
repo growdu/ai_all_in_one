@@ -420,7 +420,78 @@ PRAGMA temp_store = MEMORY;          -- 临时表放内存，提速
 5. 全部失败 → 联系用户，全新初始化（Key 全部要重配）
 ```
 
-## 九、为什么这套设计能撑住扩展
+## 九点四、可观测性（review 2.7）
+
+> 解决"用户报用着用着变慢，Master 端看不到"。
+
+1.0 最小可观测：JSON 行日志 + Prometheus 指标端点。**不上 OpenTelemetry**（2.0 引入）。
+
+### 9.4.1 结构化日志
+
+**每次 chat 请求记录**（写到 stdout JSON）：
+
+```json
+{"ts":"2026-07-29T10:00:00Z","level":"info","event":"chat","user_id":"u_xxx","provider":"doubao","model":"doubao-1-5-pro-32k","latency_ms":1240,"prompt_tokens":12,"completion_tokens":234,"status":"succeeded","error":null}
+```
+
+字段：
+- `event`：固定 `chat` / `chat_failed` / `user_switched` / `rate_limited` / `auth_failed`
+- `latency_ms`：从接到请求到响应结束
+- `prompt_tokens` / `completion_tokens`：从厂商响应里抓
+- `status`：`succeeded` / `failed`
+- `error`：失败时填 code
+
+**实现**：`internal/observability/log.go`
+- 用 `log/slog`（Go 1.21+ 标准库）
+- 默认 JSON handler，stdout
+- 1.0 不引第三方日志库
+
+### 9.4.2 Prometheus 指标
+
+```
+GET /metrics
+```
+
+**1.0 暴露的指标**：
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `aiio_chat_total` | counter | provider, model, status | chat 调用总数 |
+| `aiio_chat_latency_seconds` | histogram | provider, model | 端到端延迟 |
+| `aiio_chat_tokens_total` | counter | provider, model, type (prompt/completion) | token 用量 |
+| `aiio_rate_limit_hits_total` | counter | layer (user/provider/global) | 限流命中次数 |
+| `aiio_sse_cache_hits_total` | counter | result (hit/miss/gone) | SSE 续传缓存命中 |
+| `aiio_active_streams` | gauge | provider | 当前活跃流数 |
+
+**实现**：`internal/observability/metrics.go`
+- 用 `github.com/prometheus/client_golang/prometheus`
+- 注册到 `/metrics` 端点
+- 1.0 裸指标，无认证（仅本机或反代后访问）
+
+### 9.4.3 健康检查
+
+```
+GET /health
+```
+
+返回：
+
+```json
+{"status": "ok", "version": "0.1.0", "uptime_sec": 3600, "db_ok": true}
+```
+
+- `db_ok` = `PRAGMA quick_check` 通过
+- 2.0 加 workers_ok（每个 Worker 健康检查状态）
+
+**实现**：`internal/observability/health.go`
+
+### 9.4.4 为什么 1.0 不上 OpenTelemetry
+
+- 1.0 单二进制单 Master，分布式 trace 价值不大
+- Prometheus 指标 + 日志够定位 80% 问题
+- 2.0 引入 OTel 的成本 ≈ 0.5 人天，但收益要在多 Master 横向扩展后才显现
+
+## 七、为什么这套设计能撑住扩展
 
 | 未来需求 | 扩展点 | 影响面 |
 |---------|--------|--------|
