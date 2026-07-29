@@ -14,7 +14,7 @@
 | 3 | Worker role + 豆包/DeepSeek/Kimi 真 Provider | ✅ 完成（单进程内注册） | openaicompat 6 tests + doubao 3 + deepseek 3 + kimi 2；端到端 5 provider 10 model 列出 |
 | 4 | Key 管理（SQLite + AES-GCM） | ✅ 完成（JSON 文件 + AES-GCM；SQLite 留 2.0） | 14 security tests + 6 keys handler tests + 端到端 PUT/GET/DELETE + 文件 0600 验证 |
 | 4.5 | Keyring ↔ chat 路由集成 | ✅ 完成 | 4 chat keyring tests + 端到端 4 场景（无 key 400 / 有 key 200 / auto 部分无 key fallback） |
-| 5 | 前端 MVP（Vue3 + SSE + 5 页） | 待办 | — |
+| 5 | 前端 MVP（HTML+JS 5 页） | ✅ 完成（1.0 极简版，5 HTML + 5 JS + 1 CSS） | 静态文件服务 + API 共存，端到端 GET 4 页 + 3 资源 + /api/v1/models 全 200 |
 | 6 | 文件上传 + 多模态 | 待办 | — |
 | 7 | 移动端打磨 | 待办 | — |
 | 8 | 部署与文档 | 待办 | — |
@@ -64,6 +64,14 @@ backend/
 │   │   └── kimi/                           # Kimi（Moonshot）
 │   │       ├── kimi.go
 │   │       └── kimi_test.go                # 2 tests
+│   ├── static/                             # Phase 5: 极简前端（5 页）
+│   │   ├── onboarding.html / .js           # 4 步引导
+│   │   ├── home.html / .js                 # Chat 主页面 + SSE 流式
+│   │   ├── settings.html / .js             # API Key + AI 角色 + 高级参数
+│   │   ├── history.html / .js              # 历史对话（占位，1.1 上线）
+│   │   ├── i18n.js                         # zh/en 翻译
+│   │   ├── app.js                          # 共享 API 客户端
+│   │   └── style.css                       # 移动端优先样式
 │   ├── routing/                            # Phase 2.5: 4 因子打分 + 路由
 │   │   ├── signals.go                      # 滑动窗口
 │   │   ├── scoring.go                      # 4 因子打分公式
@@ -259,6 +267,75 @@ curl -X POST .../chat/completions -d '{"model":"doubao-1-5-pro-32k",...}'
   - openaicompat 6 + doubao 3 + deepseek 3 + kimi 2
   - mockprovider 5
 
+## 端到端验证（Phase 5 前端 MVP）
+
+```bash
+# 启动
+AIIO_MASTER_KEY=... AIIO_ROLE=master AIIO_AUTH_TOKEN=devtoken /tmp/aiio &
+
+# 静态文件服务
+curl -sI http://localhost:18080/onboarding.html  # → 200
+curl -sI http://localhost:18080/home.html         # → 200
+curl -sI http://localhost:18080/settings.html      # → 200
+curl -sI http://localhost:18080/history.html       # → 200
+curl -s  http://localhost:18080/style.css         # → CSS
+curl -s  http://localhost:18080/app.js            # → JS
+curl -s  http://localhost:18080/i18n.js           # → JS
+
+# API 仍然在原路径工作
+curl -s  http://localhost:18080/api/v1/models      # → JSON
+```
+
+**1.0 极简决策**：
+- **不引入 Vue 工具链**：4 HTML + 5 JS + 1 CSS = 10 个文件
+- **零构建步骤**：直接 serve static/
+- **i18n 自实现**（zh/en）：localStorage 存 lang，data-i18n 属性遍历
+- **后端 SSE 兼容**：fetch + ReadableStream 直接读 data: 格式
+- **不引入 Vant/Element Plus**：自写 CSS 移动端优先
+
+**5 页内容**：
+- `onboarding.html` — 4 步：选 provider → 配 key → 进聊天
+- `home.html` — 模型 + 模式 + 消息流 + 输入框
+  - 单个 / 自动选 / 对比 三模式
+  - Ctrl+Enter 发送
+  - 流式打字效果
+- `settings.html` — API Key CRUD + AI 角色 + 温度/最大长度
+- `history.html` — 占位（Phase 1.1 上线，详见 Phase 6 之后）
+- i18n: 顶栏下拉切换 zh/en
+
+**为什么不做 Vue 工程**：
+- 1.0 用户量小，HTML+JS 体验足够
+- 零 npm install 步骤，部署简单
+- 后续可平滑升级：把 app.js 拆成 Vue SFC，HTML 改 SPA router
+
+**文件清单**（`backend/static/`）：
+```
+onboarding.html  1119B
+onboarding.js    1820B
+home.html        1539B
+home.js          5170B
+settings.html    1877B
+settings.js      4832B
+history.html      508B
+history.js        375B
+i18n.js          3752B
+app.js           4187B
+style.css        4187B
+```
+
+**1.0 决策**：
+- 文件路径 `backend/static/`（与 Go 二进制同目录）
+- 浏览器直连（不走 CDN）
+- 不做 SSR（无 SEO 需求）
+- 不做 PWA（1.0 不需要离线）
+
+**Phase 5 不做**（留 P1/P2）：
+- Vue 工程化升级
+- 真正的 5 页面 SPA router
+- Vant/Element Plus 设计系统
+- PWA manifest
+- 暗色模式（CSS 已留好变量位置）
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -289,5 +366,6 @@ go test ./...
 | 2026-07-29 | 171b7eb | 2.5 | Routing：4 因子打分 + 滑动窗口 + single/auto/compare 三模式 |
 | 2026-07-29 | d965f82 | 4 | Key 管理：AES-256-GCM 加密 + JSON 文件 Keyring + CRUD API |
 | 2026-07-29 | d64c589 | 4.5 | Keyring ↔ chat 集成：userKeyFor + router 接受 keyFor 回调 |
-| 2026-07-29 | (pending) | 3 | Worker + 豆包/DeepSeek/Kimi OpenAI 兼容 Provider |
+| 2026-07-29 | fea0b47 | 3 | Worker + 豆包/DeepSeek/Kimi OpenAI 兼容 Provider |
+| 2026-07-29 | (pending) | 5 | 前端 MVP：4 HTML + 5 JS + 1 CSS，零构建工具，i18n zh/en |
 

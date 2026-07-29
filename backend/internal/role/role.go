@@ -77,6 +77,10 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 
 	handler := observability.LogRequest(logger, mux)
 
+	// 静态文件（前端）：1.0 阶段 5 个 HTML 页面在 static/
+	// 1.0 简化：不引入 Vue 工具链，纯 HTML + JS
+	mux.Handle("/", http.FileServer(http.Dir(filepath.Join(".", "static"))))
+
 	logger.Info("master role started",
 		slog.String("addr", cfg.Server.Listen),
 		slog.String("storage", cfg.Storage.SQLitePath),

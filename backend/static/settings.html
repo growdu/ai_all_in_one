@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>设置</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="home.html" class="logo">AI 助手</a>
+    <div class="topbar-right">
+      <select id="lang-switch">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <a href="settings.html" data-i18n="settings">设置</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1 data-i18n="settings.title">设置</h1>
+
+    <section class="card">
+      <h2 data-i18n="settings.apiKeys">我的 API Key</h2>
+      <div id="provider-keys"></div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="settings.systemPrompt">AI 角色</h2>
+      <textarea id="system-prompt" rows="4" data-i18n-placeholder="settings.systemPromptPlaceholder" placeholder="例：你是一个 X 领域的资深工程师..."></textarea>
+      <div class="input-actions">
+        <button id="save-system-prompt" class="btn-primary" data-i18n="settings.save">保存</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="settings.advanced">高级参数</h2>
+      <div class="form-row">
+        <label data-i18n="settings.temperature">温度</label>
+        <input type="range" id="temperature" min="0" max="2" step="0.1" value="1" />
+        <span id="temperature-val">1.0</span>
+      </div>
+      <div class="form-row">
+        <label data-i18n="settings.maxTokens">最大长度</label>
+        <input type="number" id="max-tokens" value="2000" min="100" max="32000" />
+      </div>
+    </section>
+  </main>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

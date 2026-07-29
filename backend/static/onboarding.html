@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AI All-in-One</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="home.html" class="logo">AI 助手</a>
+    <div class="topbar-right">
+      <select id="lang-switch">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <a href="settings.html" data-i18n="settings">设置</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1 data-i18n="onboarding.welcome">欢迎使用 AI 助手</h1>
+    <p data-i18n="onboarding.intro">先选一个 AI 服务配 API Key，开始使用</p>
+
+    <div class="grid" id="provider-grid">
+      <!-- 动态生成 provider 卡片 -->
+    </div>
+
+    <div class="cta">
+      <a href="home.html" class="btn-secondary" data-i18n="onboarding.skip">跳过</a>
+    </div>
+  </main>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="onboarding.js"></script>
+</body>
+</html>

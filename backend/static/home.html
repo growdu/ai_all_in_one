@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AI 助手</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="home.html" class="logo">AI 助手</a>
+    <div class="topbar-right">
+      <select id="lang-switch">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <a href="settings.html" data-i18n="settings">设置</a>
+    </div>
+  </header>
+
+  <main class="chat-page">
+    <div class="chat-toolbar">
+      <select id="model-select"></select>
+      <select id="mode-select">
+        <option value="single" data-i18n="mode.single">单个</option>
+        <option value="auto" data-i18n="mode.auto">自动选</option>
+        <option value="compare" data-i18n="mode.compare">对比</option>
+      </select>
+    </div>
+
+    <div id="messages" class="messages"></div>
+
+    <div class="input-area">
+      <textarea id="user-input" data-i18n-placeholder="chat.placeholder" placeholder="输入消息..." rows="3"></textarea>
+      <div class="input-actions">
+        <button id="stop-btn" class="btn-secondary" data-i18n="chat.stop" style="display:none">停止</button>
+        <button id="send-btn" class="btn-primary" data-i18n="chat.send">发送</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="home.js"></script>
+</body>
+</html>

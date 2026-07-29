@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>历史对话</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="home.html" class="logo">AI 助手</a>
+    <div class="topbar-right">
+      <select id="lang-switch">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <a href="settings.html" data-i18n="settings">设置</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1 data-i18n="history.title">历史对话</h1>
+    <p class="muted" data-i18n="history.empty">暂无历史对话</p>
+    <div id="conv-list" class="conv-list"></div>
+  </main>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="history.js"></script>
+</body>
+</html>
