@@ -365,9 +365,9 @@ func Register(name, baseURL string, models []ModelInfo) {
 
 1.0 用 AES-GCM + 共享密钥；2.0 上 mTLS 后可考虑去掉这个 header，靠 mTLS 通道本身保证安全。
 
-## 九点五、长对话自动截断（review 3.4）
+## 九点五、长对话自动截断 {#chat-truncation}
 
-> 解决"用户聊到 100 轮正嗨，boom — 上下文超限"。
+> 解决 review 3.4："用户聊到 100 轮正嗨，boom — 上下文超限"。
 
 ### 9.5.1 触发条件
 

@@ -111,7 +111,96 @@ frontend/web/
 
 Key 提交到后端，**前端不存明文**（用 HttpOnly Cookie 存 user_token）。
 
-### 3.3 Onboarding 流程（review 3.1）
+### 3.4 AI 角色 / System Prompt（review 3.6）
+
+> 解决"1.0 用户不能定制 AI 行为"。
+
+**Settings → AI 角色**：
+
+```
+┌──────────────────────────────────────────┐
+│  AI 角色 (System Prompt)                 │
+│                                          │
+│  [多行文本框]                            │
+│                                          │
+│  示例：                                  │
+│   • 你是 X 领域的资深工程师              │
+│   • 回答用简体中文，简洁直接              │
+│   • 涉及代码时附简短解释                  │
+│                                          │
+│  [保存]   [重置]                          │
+│                                          │
+│  ☑ 锁定 system prompt（不让自动截断影响） │
+└──────────────────────────────────────────┘
+```
+
+**前端行为**：
+- 用户输入 → 存 localStorage `aiio.system_prompt`
+- 每次新对话自动注入为 messages[0]，role: system
+- "锁定" 复选框状态独立存 `aiio.system_prompt_locked`
+- 切换 Model 不影响 system prompt
+
+**后端行为**：
+- 不感知 system prompt（前端注入）
+- 截断策略保护 system 消息（除非用户关闭锁定）
+- 见 [后端设计 §九点五](../backend/02-provider.md#chat-truncation)
+
+**高级用户**：
+- 单条 system 可编辑（chat 页面长按消息）
+- 多个 system 可用"profile"切换（P2 暂列）
+
+**为什么 1.0 客户端做**：
+- 后端无状态更好扩展
+- 1.0 用户切换模型/换设备时，system prompt 跟随用户
+- 2.0 切自营时同步到云端
+
+### 3.5 高级参数面板（review 3.7）
+
+> 解决"温度/top_p/max_tokens 都没暴露给前端"。
+
+**Settings → 高级（折叠区）**：
+
+```
+┌──────────────────────────────────────────┐
+│  ▼ 高级                                  │
+│                                          │
+│  温度     [滑块 0-2]    1.0              │
+│  top_p    [滑块 0-1]    1.0              │
+│  max_tokens  [输入]   2000               │
+│                                          │
+│  ☐ JSON 模式（强制输出 JSON）             │
+│  ☐ 推理模式（仅 o1 类模型可见）           │
+│  推理力度  [低/中/高 ▼]                  │
+│                                          │
+│  function calling（自动显示，仅工具模型）  │
+│  ☑ 允许并行调用                          │
+│  最大步数  [10]                          │
+│                                          │
+│  [恢复默认]                              │
+└──────────────────────────────────────────┘
+```
+
+**前端行为**：
+- 折叠区默认收起，Settings 入口 "高级" 展开
+- 改动自动存 localStorage `aiio.advanced_params`
+- 发 chat 时把参数合并到请求体
+- 切换 Model 时，如果新 Model 不支持某参数（如推理模式）自动隐藏
+
+**后端行为**：
+- 透传 temperature / top_p / max_tokens（OpenAI 兼容）
+- JSON mode：后端不处理，透传 `response_format: { type: "json_object" }`
+- tools：透传 OpenAI tools 字段，2.0 加完整 function calling 编排
+
+**i18n 接入**：
+- 所有 label 走 t()（用 §八 i18n 框架）
+- 中英两套文案就绪
+
+**为什么 1.0 就加**：
+- 用户调参是基本诉求，1.0 用户用一段时间必然想要
+- 后端透传零成本
+- 前端折叠区不打扰默认用户
+
+### 3.6 Onboarding 流程（review 3.1）
 
 > 解决"99% 用户配 1 个 Key 就用得很好，1.0 一进来就看到 4 个红色未配提示"。
 
