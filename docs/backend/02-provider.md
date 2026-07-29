@@ -365,7 +365,69 @@ func Register(name, baseURL string, models []ModelInfo) {
 
 1.0 用 AES-GCM + 共享密钥；2.0 上 mTLS 后可考虑去掉这个 header，靠 mTLS 通道本身保证安全。
 
-## 九点二、SQLite 可靠性（review 2.4）
+## 九点五、长对话自动截断（review 3.4）
+
+> 解决"用户聊到 100 轮正嗨，boom — 上下文超限"。
+
+### 9.5.1 触发条件
+
+Master 在调用 Provider 之前估算 token 数：
+
+```go
+// internal/capabilities/chat/truncator.go
+type Truncator struct {
+    model    ModelInfo
+    counter  func(string) int   // 简单字符/token 估算
+}
+
+func (t *Truncator) Fit(messages []ChatMessage) ([]ChatMessage, TruncatedInfo) {
+    budget := t.model.ContextWindow * 90 / 100   // 留 10% 给输出
+    // ...
+}
+```
+
+**token 估算**：
+- 1.0 用字符/4 粗估（中文/英文混用 ≈ chars/3）
+- 2.0 接入 tiktoken-go 精确算
+- 估算误差 20% 没关系，反正留 10% buffer
+
+### 9.5.2 截断策略（3 步降级）
+
+1. **丢最早的 user/assistant 轮**（保留 system）
+2. **仍超限**：丢到只保留 system + 最近 10 轮
+3. **仍超限**：返回 422 + `code: context_too_long`，前端弹"建议开启新对话"
+
+**保留规则**：
+- system 消息永远保留
+- 最近的 user 消息永远保留（用户当前问题）
+- tool 消息与对应 assistant tool_call 一起保留（不能拆）
+
+### 9.5.3 响应
+
+正常截断时响应头：
+
+```
+X-AIIO-Messages-Truncated: 5    # 丢了 5 条
+X-AIIO-Context-Usage: 0.87      # 截断后上下文使用率
+```
+
+前端按 X-AIIO-Context-Usage 在顶栏显示进度条：
+- < 70%：绿色
+- 70-90%：黄色
+- > 90%：红色，提示"建议开启新对话"
+
+### 9.5.4 高级用户
+
+Settings 加开关 "锁定 system prompt"，开启后 system 消息不被截断，可手动编辑。
+
+### 9.5.5 为什么在 Master 而非 Provider
+
+- Provider 限流 / 超时由 Provider 自己判
+- 但**输入消息的截断决策**涉及 system 保留、tool 配对等业务规则
+- 放 Master 才能跨 Provider 一致
+- 也方便后续接 AI summarization 进一步压缩（2.0）
+
+## 九点六、SQLite 可靠性（review 2.4）
 
 1.0 用 modernc.org/sqlite 纯 Go 驱动。必须开的 PRAGMA 与备份策略：
 
