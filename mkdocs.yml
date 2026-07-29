@@ -87,6 +87,7 @@ nav:
   - 架构:
       - 顶层架构: architecture/00-overview.md
       - 路由策略: architecture/01-routing-strategy.md
+      - 输入处理: architecture/02-input-processing.md
       - 统一协议: api/01-protocol.md
   - 设计:
       - 后端 Provider 抽象: backend/02-provider.md

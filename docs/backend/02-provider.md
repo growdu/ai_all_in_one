@@ -553,6 +553,57 @@ GET /health
 - Prometheus 指标 + 日志够定位 80% 问题
 - 2.0 引入 OTel 的成本 ≈ 0.5 人天，但收益要在多 Master 横向扩展后才显现
 
+## 九点八、输入处理 Pipeline（review C）
+
+> 实现细节见 [输入处理设计](../architecture/02-input-processing.md)。这里只列接口与流程。
+
+**Pipeline 顺序**：
+
+```
+用户请求 → [1. 鉴权] → [2. 限流] → [3. 附件预处理] → [4. Prompt 增强] → [5. 长对话截断] → [6. 路由到 Provider]
+```
+
+| 步骤 | 必走 | 失败 fallback |
+|------|------|---------------|
+| 1-2 | 是 | 返回 401/429 |
+| 3 附件预处理 | 是 | 单附件失败 → 跳过该附件，注入警告；全部失败 → 错误码 |
+| 4 Prompt 增强 | 用户开关 | 关闭或异常 → 字面透传 |
+| 5 截断 | 是 | 超限 → 422 context_too_long |
+| 6 路由 | 是 | 失败 → 502 + Provider 错误码 |
+
+**核心数据结构**（`internal/capabilities/chat/pipeline.go`）：
+
+```go
+type Pipeline struct {
+    preprocessors map[string]Preprocessor
+    enhancer      *Enhancer
+    truncator     *Truncator
+}
+
+func (p *Pipeline) Process(ctx context.Context, req ChatRequest, userID string) (ChatRequest, ProcessingInfo, error) {
+    // 见输入处理 §6.2 完整实现
+}
+```
+
+**注册表**（`internal/capabilities/chat/preprocess/registry.go`）：
+
+```go
+var DefaultRegistry = &Registry{
+    Processors: map[string]Preprocessor{
+        "text/plain":      NewTextProcessor(50 * 1024),
+        "text/x-python":   NewTextProcessor(50 * 1024),
+        "application/pdf": NewPDFProcessor(),
+        "image/png":       NewImageProcessor(5 * 1024 * 1024),
+        "image/jpeg":      NewImageProcessor(5 * 1024 * 1024),
+    },
+}
+```
+
+**YAGNI 边界**：
+- 1.0 不做 Office（.docx .xlsx）
+- 1.0 不做音频/视频转写
+- 1.0 不做用户自定义增强模板
+
 ## 九点七、历史会话 schema（review 1.4）
 
 > 解决 review 1.4：1.0 最小可用版历史持久化。
