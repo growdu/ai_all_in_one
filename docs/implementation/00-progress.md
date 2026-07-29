@@ -11,7 +11,7 @@
 | 1 | 核心抽象（Modality / Provider / Registry） | ✅ 完成 | 12 tests 通过（Modality 2 / ModelInfo 4 / Registry 4 / 其他 2） |
 | 2 | Master chat 端到端（single 模式流式） | ✅ 完成 | mock provider + 真实 http server，7 tests + 端到端 stream 验证通过 |
 | 2.5 | Routing 进阶（auto / compare） | ✅ 完成 | 9 routing tests + 端到端 auto/compare 验证通过 |
-| 3 | Worker role（豆包/DeepSeek/Kimi Provider） | 待办 | — |
+| 3 | Worker role + 豆包/DeepSeek/Kimi 真 Provider | ✅ 完成（单进程内注册） | openaicompat 6 tests + doubao 3 + deepseek 3 + kimi 2；端到端 5 provider 10 model 列出 |
 | 4 | Key 管理（SQLite + AES-GCM） | ✅ 完成（JSON 文件 + AES-GCM；SQLite 留 2.0） | 14 security tests + 6 keys handler tests + 端到端 PUT/GET/DELETE + 文件 0600 验证 |
 | 4.5 | Keyring ↔ chat 路由集成 | ✅ 完成 | 4 chat keyring tests + 端到端 4 场景（无 key 400 / 有 key 200 / auto 部分无 key fallback） |
 | 5 | 前端 MVP（Vue3 + SSE + 5 页） | 待办 | — |
@@ -47,11 +47,23 @@ backend/
 │   │   ├── models_test.go                  # 2 tests
 │   │   ├── keys.go                         # /api/v1/keys CRUD
 │   │   └── keys_test.go                    # 6 tests
-│   ├── providers/                          # Phase 2: mock provider
-│   │   └── mockprovider/                   # 不依赖外部 API 的回显 provider
-│   │       ├── mock.go
-│   │       ├── mock_test.go                # 5 tests
-│   │       └── slow.go                     # 慢速回显（演示 auto 模式 fallback）
+│   ├── providers/                          # Phase 2 + 3
+│   │   ├── mockprovider/                   # 不依赖外部 API 的回显 provider
+│   │   │   ├── mock.go
+│   │   │   ├── mock_test.go                # 5 tests
+│   │   │   └── slow.go                     # 慢速回显
+│   │   ├── openaicompat/                   # Phase 3: OpenAI 兼容基类
+│   │   │   ├── provider.go                 # SSE 解析 + 非流式
+│   │   │   └── provider_test.go            # 6 tests（httptest upstream）
+│   │   ├── doubao/                         # 豆包（火山方舟 OpenAI 兼容）
+│   │   │   ├── doubao.go
+│   │   │   └── doubao_test.go              # 3 tests
+│   │   ├── deepseek/                       # DeepSeek
+│   │   │   ├── deepseek.go
+│   │   │   └── deepseek_test.go            # 3 tests
+│   │   └── kimi/                           # Kimi（Moonshot）
+│   │       ├── kimi.go
+│   │       └── kimi_test.go                # 2 tests
 │   ├── routing/                            # Phase 2.5: 4 因子打分 + 路由
 │   │   ├── signals.go                      # 滑动窗口
 │   │   ├── scoring.go                      # 4 因子打分公式
@@ -209,6 +221,44 @@ curl -X POST .../chat/completions -d '{"model":"auto",...}'
 - `internal/api/chat_keyring_test.go`: 4 新 test
 - `internal/role/role.go`: 启动时把 keyring 传给 ChatHandler
 
+## 端到端验证（Phase 3 真 Provider）
+
+```bash
+# 启动 master（5 provider 自动注册）
+AIIO_MASTER_KEY=0123456789abcdef0123456789abcdef /tmp/aiio &
+
+# 1. 列模型（10 个 model 来自 5 provider）
+curl http://localhost:18080/api/v1/models
+# mock / slow / doubao 3 / deepseek 2 / kimi 2
+
+# 2. chat doubao 无 key → 400 引导
+curl -X POST .../chat/completions -d '{"model":"doubao-1-5-pro-32k",...}'
+# → 400 no_provider_configured
+
+# 3. chat doubao 配 key 后（需要真 API key，未演示）
+# → 200 + 豆包真实回复
+```
+
+**实现要点**：
+- **OpenAI 兼容基类** (`internal/providers/openaicompat`)：复用 95% 代码
+  - 60s timeout http.Client
+  - Bearer token 透传
+  - SSE 解析：bufio.Scanner + 1MB 行缓冲
+  - 上下文取消：ctx.Done() 协程退出
+- **3 个具体 provider** = 配置文件级别（每个 30-50 行）
+  - doubao: 火山方舟 OpenAI 兼容端点
+  - deepseek: api.deepseek.com/v1
+  - kimi: api.moonshot.cn/v1
+- **1.0 简化**：单进程内注册（不真做 Worker 远程转发）
+  - docs/backend/02-provider.md §四 的多区域架构留 2.0
+  - 当前 5 provider 都在 Master 进程内
+
+**测试统计**：
+- 累计 78 tests passed
+  - config 3 + core 10 + observability 5 + api 18 + routing 9 + security 14
+  - openaicompat 6 + doubao 3 + deepseek 3 + kimi 2
+  - mockprovider 5
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -238,5 +288,6 @@ go test ./...
 | 2026-07-29 | be2a8e1 | 2 | Master chat 端到端：chat handler + models handler + mock provider + SSE 流式透传 |
 | 2026-07-29 | 171b7eb | 2.5 | Routing：4 因子打分 + 滑动窗口 + single/auto/compare 三模式 |
 | 2026-07-29 | d965f82 | 4 | Key 管理：AES-256-GCM 加密 + JSON 文件 Keyring + CRUD API |
-| 2026-07-29 | (pending) | 4.5 | Keyring ↔ chat 集成：userKeyFor + router 接受 keyFor 回调 |
+| 2026-07-29 | d64c589 | 4.5 | Keyring ↔ chat 集成：userKeyFor + router 接受 keyFor 回调 |
+| 2026-07-29 | (pending) | 3 | Worker + 豆包/DeepSeek/Kimi OpenAI 兼容 Provider |
 

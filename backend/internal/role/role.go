@@ -18,6 +18,9 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/config"
 	"github.com/growdu/ai_all_in_one/backend/internal/core"
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
+	"github.com/growdu/ai_all_in_one/backend/internal/providers/deepseek"
+	"github.com/growdu/ai_all_in_one/backend/internal/providers/doubao"
+	"github.com/growdu/ai_all_in_one/backend/internal/providers/kimi"
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/mockprovider"
 	"github.com/growdu/ai_all_in_one/backend/internal/routing"
 	"github.com/growdu/ai_all_in_one/backend/internal/security"
@@ -36,10 +39,13 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 		return err == nil || os.IsNotExist(err)
 	}
 
-	// 初始化 Provider Registry（1.0 阶段注册 mock + slow 用于演示）
+	// 初始化 Provider Registry（1.0 阶段注册 mock + 国内 3 家 + slow）
 	reg := core.NewRegistry()
 	reg.RegisterChat(mockprovider.New())
 	reg.RegisterChat(mockprovider.NewSlow())
+	reg.RegisterChat(doubao.New())
+	reg.RegisterChat(deepseek.New())
+	reg.RegisterChat(kimi.New())
 
 	// Routing：4 因子打分 + 滑动窗口
 	signals := routing.NewWindow(200, 0)
