@@ -13,6 +13,7 @@
 | 2.5 | Routing 进阶（auto / compare） | ✅ 完成 | 9 routing tests + 端到端 auto/compare 验证通过 |
 | 3 | Worker role（豆包/DeepSeek/Kimi Provider） | 待办 | — |
 | 4 | Key 管理（SQLite + AES-GCM） | ✅ 完成（JSON 文件 + AES-GCM；SQLite 留 2.0） | 14 security tests + 6 keys handler tests + 端到端 PUT/GET/DELETE + 文件 0600 验证 |
+| 4.5 | Keyring ↔ chat 路由集成 | ✅ 完成 | 4 chat keyring tests + 端到端 4 场景（无 key 400 / 有 key 200 / auto 部分无 key fallback） |
 | 5 | 前端 MVP（Vue3 + SSE + 5 页） | 待办 | — |
 | 6 | 文件上传 + 多模态 | 待办 | — |
 | 7 | 移动端打磨 | 待办 | — |
@@ -38,11 +39,14 @@ backend/
 │   │   ├── models_test.go                  # 4 tests
 │   │   ├── registry.go                     # ChatProvider interface + Registry
 │   │   └── registry_test.go                # 4 tests
-│   ├── api/                                # Phase 2: HTTP handlers
-│   │   ├── chat.go                         # /api/v1/chat/completions
+│   ├── api/                                # Phase 2 + 4 + 4.5: HTTP handlers
+│   │   ├── chat.go                         # /api/v1/chat/completions（单/auto/compare + Keyring 注入）
 │   │   ├── chat_test.go                    # 7 tests
+│   │   ├── chat_keyring_test.go            # 4 tests（Keyring 集成）
 │   │   ├── models.go                       # /api/v1/models
-│   │   └── models_test.go                  # 2 tests
+│   │   ├── models_test.go                  # 2 tests
+│   │   ├── keys.go                         # /api/v1/keys CRUD
+│   │   └── keys_test.go                    # 6 tests
 │   ├── providers/                          # Phase 2: mock provider
 │   │   └── mockprovider/                   # 不依赖外部 API 的回显 provider
 │   │       ├── mock.go
@@ -167,6 +171,44 @@ curl -X DELETE http://localhost:18080/api/v1/keys/doubao -H "Authorization: Bear
 - **JSON 文件而非 SQLite**：1.0 用户量小 + 零 CGO 部署门槛。SQLite 留 2.0（`modernc.org/sqlite` 纯 Go 驱动）
 - **Keyring 不接 chat 路由**：1.0 阶段 keyring 暴露为 API（CRUD），chat handler 仍用 PLACEHOLDER_USER_KEY。Phase 5 接入真 Key → Provider 的链路
 
+## 端到端验证（Phase 4.5 Keyring ↔ Chat 集成）
+
+```bash
+# 启动（设 AIIO_MASTER_KEY=32字节）
+AIIO_MASTER_KEY=0123456789abcdef0123456789abcdef /tmp/aiio &
+
+# 场景 1：chat 无 key → 400 引导用户去设置
+curl -X POST .../chat/completions -d '{"model":"mock-echo",...}'
+# → 400 {"error":{"code":"no_provider_configured",
+#                "message":"no key configured for provider \"mock\", please add one in Settings"}}
+
+# 场景 2：PUT key + chat → 200 用真 key
+curl -X POST .../keys -d '{"provider":"mock","key":"my-real-secret"}'
+# → 200 {"provider":"mock","updated_at":1785322564}
+curl -X POST .../chat/completions -d '{"model":"mock-echo",...}'
+# → 200 {"content":"echo: hi","provider":"mock",...}
+
+# 场景 3：auto 模式部分无 key → 自动跳过无 key 的 provider
+# (mock 配了 key，slow 没配)
+curl -X POST .../chat/completions -d '{"model":"auto",...}'
+# → 200 {"content":"echo: hi","provider":"mock",...}
+# router 内部 keyFor 回调跳过 slow（无 key）
+```
+
+**核心设计**：
+- `userKeyFor(provider)` 统一封装 Keyring 查询
+  - Keyring == nil → fallback placeholder（仅 mock 演示用）
+  - Keyring != nil 但 provider 无 key → 400 引导
+- router 的 `AutoChat` / `Compare` 接收 `keyFor func(string) (string, error)` 回调
+  - 每个 provider 调前各自取 key，无 key 时跳过该 provider
+  - 不再传单一 userKey 字符串
+
+**代码变更**：
+- `internal/api/chat.go`: ChatHandler 加 Keyring 字段 + userKeyFor 方法
+- `internal/routing/router.go`: AutoChat/Compare 改 keyFor 回调签名
+- `internal/api/chat_keyring_test.go`: 4 新 test
+- `internal/role/role.go`: 启动时把 keyring 传给 ChatHandler
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -195,5 +237,6 @@ go test ./...
 | 2026-07-29 | c567951 | 1 | 核心抽象：Modality / 统一数据模型 / ChatProvider interface / Registry |
 | 2026-07-29 | be2a8e1 | 2 | Master chat 端到端：chat handler + models handler + mock provider + SSE 流式透传 |
 | 2026-07-29 | 171b7eb | 2.5 | Routing：4 因子打分 + 滑动窗口 + single/auto/compare 三模式 |
-| 2026-07-29 | (pending) | 4 | Key 管理：AES-256-GCM 加密 + JSON 文件 Keyring + CRUD API |
+| 2026-07-29 | d965f82 | 4 | Key 管理：AES-256-GCM 加密 + JSON 文件 Keyring + CRUD API |
+| 2026-07-29 | (pending) | 4.5 | Keyring ↔ chat 集成：userKeyFor + router 接受 keyFor 回调 |
 

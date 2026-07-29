@@ -49,18 +49,25 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	mux.HandleFunc("/health", observability.HealthHandler(dbOK))
 	mux.HandleFunc("/metrics", observability.MetricsHandler())
 	mux.Handle("/api/v1/models", &api.ModelsHandler{Registry: reg})
+
+	// 1.0 简化：Keyring handler 始终挂载（即便 keyring 未初始化，返回 500 时也安全）
+	// 实际：见下方的 lazy init
+	var keyring *security.Keyring
+	if kr, err := initKeyring(cfg, logger); err == nil {
+		keyring = kr
+		mux.Handle("/api/v1/keys", &api.KeysHandler{Keyring: kr})
+		mux.Handle("/api/v1/keys/", &api.KeysHandler{Keyring: kr})
+	} else {
+		logger.Warn("keyring disabled", slog.String("err", err.Error()))
+	}
+
 	mux.Handle("/api/v1/chat/completions", &api.ChatHandler{
 		Logger:    logger,
 		Registry:  reg,
 		Router:    router,
+		Keyring:   keyring,
 		AuthToken: os.Getenv("AIIO_AUTH_TOKEN"),
 	})
-	// 1.0 简化：Keyring handler 始终挂载（即便 keyring 未初始化，返回 500 时也安全）
-	// 实际：见下方的 lazy init
-	if kr, err := initKeyring(cfg, logger); err == nil {
-		mux.Handle("/api/v1/keys", &api.KeysHandler{Keyring: kr})
-		mux.Handle("/api/v1/keys/", &api.KeysHandler{Keyring: kr})
-	}
 
 	handler := observability.LogRequest(logger, mux)
 

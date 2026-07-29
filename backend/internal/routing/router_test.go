@@ -44,10 +44,11 @@ func TestAutoMode_FallbackOnFailure(t *testing.T) {
 	reg.RegisterChat(&fakeProvider{name: "openai", delay: 10 * time.Millisecond, shouldFail: true})
 
 	r := NewRouter(reg, NewWindow(100, 0), DefaultWeights(), 1)
+	keyFor := func(name string) (string, error) { return "key-" + name, nil }
 	resp, _, err := r.AutoChat(context.Background(), core.ChatRequest{
 		Model:    "auto",
 		Messages: []core.ChatMessage{{Role: "user", Content: "hi"}},
-	}, []string{"doubao", "openai"}, "test-key")
+	}, []string{"doubao", "openai"}, "ignored", keyFor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +61,11 @@ func TestAutoMode_FallbackOnFailure(t *testing.T) {
 func TestAutoMode_NoProviders(t *testing.T) {
 	reg := core.NewRegistry()
 	r := NewRouter(reg, NewWindow(100, 0), DefaultWeights(), 1)
+	keyFor := func(name string) (string, error) { return "k", nil }
 	_, _, err := r.AutoChat(context.Background(), core.ChatRequest{
 		Model:    "auto",
 		Messages: []core.ChatMessage{{Role: "user", Content: "hi"}},
-	}, nil, "test-key")
+	}, nil, "ignored", keyFor)
 	if err == nil {
 		t.Error("expected error for empty provider list")
 	}
@@ -75,10 +77,11 @@ func TestCompareMode_AllSucceed(t *testing.T) {
 	reg.RegisterChat(&fakeProvider{name: "openai", delay: 10 * time.Millisecond, shouldFail: false, content: "openai-reply"})
 
 	r := NewRouter(reg, NewWindow(100, 0), DefaultWeights(), 1)
+	keyFor := func(name string) (string, error) { return "key-" + name, nil }
 	results, err := r.Compare(context.Background(), core.ChatRequest{
 		Model:    "compare",
 		Messages: []core.ChatMessage{{Role: "user", Content: "hi"}},
-	}, []string{"doubao", "openai"}, "test-key")
+	}, []string{"doubao", "openai"}, "ignored", keyFor)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,10 +106,11 @@ func TestCompareMode_SomeFailed(t *testing.T) {
 	reg.RegisterChat(&fakeProvider{name: "openai", delay: 10 * time.Millisecond, shouldFail: true})
 
 	r := NewRouter(reg, NewWindow(100, 0), DefaultWeights(), 1)
+	keyFor := func(name string) (string, error) { return "key-" + name, nil }
 	results, err := r.Compare(context.Background(), core.ChatRequest{
 		Model:    "compare",
 		Messages: []core.ChatMessage{{Role: "user", Content: "hi"}},
-	}, []string{"doubao", "openai"}, "test-key")
+	}, []string{"doubao", "openai"}, "ignored", keyFor)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,7 +12,12 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/core"
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
 	"github.com/growdu/ai_all_in_one/backend/internal/routing"
+	"github.com/growdu/ai_all_in_one/backend/internal/security"
 )
+
+// placeholderUserKey 1.0 阶段：Keyring 未配置或 Provider 无 Key 时 fallback
+// 详见 docs/backend/02-provider.md §八
+const placeholderUserKey = "PLACEHOLDER_USER_KEY"
 
 // ChatHandler 处理 /api/v1/chat/completions
 //
@@ -22,13 +27,16 @@ import (
 //     single:  req.Model 前缀推断 provider
 //     auto:    req.Model == "auto" → 4 因子打分选 1，失败 fallback 1 次
 //     compare: req.Compare != nil → 并行发 N 个 provider
+//   - Key 注入：单 provider 模式从 Keyring 取该 provider 的真 Key；
+//     auto/compare 模式由 router 内部用 Keyring.ProviderKey 注入
 //   - 流式透传：SSE chunk 直接转给上游，OpenAI 兼容格式
 //   - 错误：统一 ErrorResponse 结构（docs/api/01-protocol.md §四）
 type ChatHandler struct {
 	Logger    *slog.Logger
 	Registry  *core.Registry
-	AuthToken string     // 1.0 简化：非空即要求；2.0 接 JWT
+	AuthToken string         // 1.0 简化：非空即要求；2.0 接 JWT
 	Router    *routing.Router // single 模式可空，auto/compare 必须
+	Keyring   *security.Keyring // 1.0 简化：nil 时 fallback placeholder
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,8 +64,6 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const userKey = "PLACEHOLDER_USER_KEY" // 1.0 简化；Phase 4 接入
-
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 
@@ -65,18 +71,26 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case req.Compare != nil:
 		// compare 模式
-		h.serveCompare(ctx, w, req, userKey)
+		h.serveCompare(ctx, w, req)
 		return
 	case req.Model == "auto":
 		// auto 模式
-		h.serveAuto(ctx, w, req, userKey)
+		h.serveAuto(ctx, w, req)
 		return
 	}
 
 	// single 模式（默认）
-	provider, err := h.Registry.GetChat(inferProviderFromModel(req.Model))
+	providerName := inferProviderFromModel(req.Model)
+	provider, err := h.Registry.GetChat(providerName)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "model_not_found", "model not found: "+req.Model, "", 0)
+		return
+	}
+
+	// 从 Keyring 取该 provider 的 Key；未配置时返回 400 引导用户去设置
+	userKey, keyErr := h.userKeyFor(providerName)
+	if keyErr != nil {
+		writeError(w, http.StatusBadRequest, "no_provider_configured", keyErr.Error(), providerName, 0)
 		return
 	}
 
@@ -87,8 +101,22 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.serveComplete(ctx, w, provider, req, userKey)
 }
 
+// userKeyFor 从 Keyring 取 provider 的 user key
+// 1.0 简化：Keyring 为 nil 时 fallback placeholder（仅用于 mock 演示）
+// 2.0 改为强制要求 Keyring
+func (h *ChatHandler) userKeyFor(provider string) (string, error) {
+	if h.Keyring == nil {
+		return placeholderUserKey, nil
+	}
+	key, err := h.Keyring.Get(provider)
+	if err != nil {
+		return "", fmt.Errorf("no key configured for provider %q, please add one in Settings", provider)
+	}
+	return key, nil
+}
+
 // serveAuto auto 模式：打分选 1 + 失败 fallback
-func (h *ChatHandler) serveAuto(ctx context.Context, w http.ResponseWriter, req core.ChatRequest, userKey string) {
+func (h *ChatHandler) serveAuto(ctx context.Context, w http.ResponseWriter, req core.ChatRequest) {
 	if h.Router == nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "router not configured", "", 0)
 		return
@@ -99,6 +127,8 @@ func (h *ChatHandler) serveAuto(ctx context.Context, w http.ResponseWriter, req 
 		return
 	}
 
+	keyFor := h.makeKeyFor()
+
 	if req.Stream {
 		// auto + stream: 先选 1，再走 serveStream
 		chosen, err := h.Router.PickProvider(ctx, req, candidates)
@@ -106,14 +136,18 @@ func (h *ChatHandler) serveAuto(ctx context.Context, w http.ResponseWriter, req 
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), "", 0)
 			return
 		}
-		// 用 chosen 第一个 model 调
+		provKey, kerr := keyFor(chosen)
+		if kerr != nil {
+			writeError(w, http.StatusBadRequest, "no_provider_configured", kerr.Error(), chosen, 0)
+			return
+		}
 		req.Model = firstModelOfProvider(h.Registry, chosen)
 		provider, _ := h.Registry.GetChat(chosen)
-		h.serveStream(ctx, w, provider, req, userKey)
+		h.serveStream(ctx, w, provider, req, provKey)
 		return
 	}
 
-	resp, _, err := h.Router.AutoChat(ctx, req, candidates, userKey)
+	resp, _, err := h.Router.AutoChat(ctx, req, candidates, "", keyFor)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "all_providers_failed", err.Error(), "", 0)
 		return
@@ -125,7 +159,7 @@ func (h *ChatHandler) serveAuto(ctx context.Context, w http.ResponseWriter, req 
 }
 
 // serveCompare compare 模式：并行发 N 个 provider
-func (h *ChatHandler) serveCompare(ctx context.Context, w http.ResponseWriter, req core.ChatRequest, userKey string) {
+func (h *ChatHandler) serveCompare(ctx context.Context, w http.ResponseWriter, req core.ChatRequest) {
 	if h.Router == nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "router not configured", "", 0)
 		return
@@ -145,7 +179,7 @@ func (h *ChatHandler) serveCompare(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 
-	results, err := h.Router.Compare(ctx, req, candidates, userKey)
+	results, err := h.Router.Compare(ctx, req, candidates, "", h.makeKeyFor())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), "", 0)
 		return
@@ -156,6 +190,14 @@ func (h *ChatHandler) serveCompare(ctx context.Context, w http.ResponseWriter, r
 		"id":      "compare-" + req.Model,
 		"compare": map[string]any{"results": results},
 	})
+}
+
+// makeKeyFor 返回一个 keyForProvider 回调
+// 给 router 内部用，从 Keyring 取每个 provider 的 key
+func (h *ChatHandler) makeKeyFor() func(string) (string, error) {
+	return func(provider string) (string, error) {
+		return h.userKeyFor(provider)
+	}
 }
 
 // firstModelOfProvider 取 provider 第一个 model id（auto+stream 用）

@@ -6,6 +6,7 @@ package routing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -66,7 +67,8 @@ func (r *Router) PickProvider(ctx context.Context, req core.ChatRequest, candida
 }
 
 // AutoChat auto 模式：选 1 + 失败 fallback 最多 maxAutoFallback 次
-func (r *Router) AutoChat(ctx context.Context, req core.ChatRequest, candidates []string, userKey string) (core.ChatResponse, []core.AttachmentInfo, error) {
+// keyFor 是回调：从 provider 名取 user key（用于 Keyring 注入）
+func (r *Router) AutoChat(ctx context.Context, req core.ChatRequest, candidates []string, userKey string, keyFor func(string) (string, error)) (core.ChatResponse, []core.AttachmentInfo, error) {
 	if len(candidates) == 0 {
 		return core.ChatResponse{}, nil, errors.New("no_provider_configured")
 	}
@@ -94,8 +96,14 @@ func (r *Router) AutoChat(ctx context.Context, req core.ChatRequest, candidates 
 			lastErr = err
 			continue
 		}
+		// 取该 provider 的真 Key；缺失时跳过
+		provKey, err := keyFor(name)
+		if err != nil {
+			lastErr = fmt.Errorf("no key for %s: %w", name, err)
+			continue
+		}
 		start := time.Now()
-		resp, err := p.ChatComplete(ctx, req, userKey)
+		resp, err := p.ChatComplete(ctx, req, provKey)
 		latency := time.Since(start).Milliseconds()
 		r.signals.Record(Signal{
 			Provider: name, Success: err == nil, LatencyMs: int(latency), Timestamp: time.Now(),
@@ -120,7 +128,8 @@ type CompareResult struct {
 }
 
 // Compare 并行发 N 个 Provider
-func (r *Router) Compare(ctx context.Context, req core.ChatRequest, candidates []string, userKey string) ([]CompareResult, error) {
+// keyFor 是回调：从 provider 名取 user key
+func (r *Router) Compare(ctx context.Context, req core.ChatRequest, candidates []string, userKey string, keyFor func(string) (string, error)) ([]CompareResult, error) {
 	if len(candidates) < 2 {
 		return nil, errors.New("only_one_provider")
 	}
@@ -135,8 +144,13 @@ func (r *Router) Compare(ctx context.Context, req core.ChatRequest, candidates [
 				results[i] = CompareResult{Provider: name, Status: "failed", StartedAt: time.Now(), Error: &core.ErrorBody{Code: "provider_not_found", Message: err.Error()}}
 				return
 			}
+			provKey, kerr := keyFor(name)
+			if kerr != nil {
+				results[i] = CompareResult{Provider: name, Status: "failed", StartedAt: time.Now(), Error: &core.ErrorBody{Code: "no_provider_configured", Message: kerr.Error(), Provider: name}}
+				return
+			}
 			start := time.Now()
-			resp, err := p.ChatComplete(ctx, req, userKey)
+			resp, err := p.ChatComplete(ctx, req, provKey)
 			latency := time.Since(start).Milliseconds()
 			r.signals.Record(Signal{Provider: name, Success: err == nil, LatencyMs: int(latency), Timestamp: time.Now()})
 			if err != nil {
