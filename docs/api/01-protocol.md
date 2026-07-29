@@ -186,7 +186,110 @@ DELETE /api/v1/files/{id}     1.0 用户上传的；2.0+ AI 生成的也支持
 - 现在补这一条 ≈ 1 个 schema 描述
 - 2.0 临时加就要改 3 处（API、存储、UI）
 
-### 1.4 预留接口（1.0 不实现，2.0 启用）
+### 1.4 异步任务（Job）
+
+> 1.0 chat 是流式就够了，但 2.0+ 加音乐/视频/图片生成都是异步任务。
+> 现在就把 Job 协议定下来，2.0 加新模态时只写 Provider 实现，不动协议层。
+
+**端点**：
+
+```
+POST   /api/v1/jobs                  提交任务
+GET    /api/v1/jobs/{id}             查状态
+GET    /api/v1/jobs/{id}/result      拿结果（生成出的 file_id）
+GET    /api/v1/jobs/{id}/events      SSE 实时进度（可选，polling 也行）
+DELETE /api/v1/jobs/{id}             取消
+GET    /api/v1/jobs                  列表（按用户过滤，分页）
+```
+
+**Job 状态机**：
+
+```
+           submit
+   ┌──────────────────►
+   │                   │
+ [pending]        [running] ───► [succeeded] → 返回 result_file_ids
+   │                   │      └► [failed]    → 携带 error
+   │                   │      └► [cancelled] → 用户主动
+   │                   ▼
+   └───────── cancel ┘
+```
+
+**Job 对象 schema**：
+
+```json
+{
+  "id": "job_xxx",
+  "type": "music.generate",
+  "status": "running",
+  "progress": 0.45,
+  "input": {
+    "prompt": "一首关于星空的电子乐",
+    "duration_sec": 60
+  },
+  "result_file_ids": [],
+  "error": null,
+  "created_at": "2026-07-29T10:00:00Z",
+  "updated_at": "2026-07-29T10:00:30Z",
+  "owner_user_id": "user_xxx"
+}
+```
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `type` | 是 | `music.generate` / `image.generate` / `video.generate` 等 |
+| `status` | 是 | 枚举：`pending` / `running` / `succeeded` / `failed` / `cancelled` |
+| `progress` | 否 | 0-1 之间，succeeded 时恒为 1 |
+| `result_file_ids` | 否 | succeeded 时填充，引用 `file_id`（见 1.3） |
+| `error` | 否 | failed 时填充，与 chat 错误同结构（见四、错误约定） |
+
+**提交示例**：
+
+```http
+POST /api/v1/jobs
+Content-Type: application/json
+
+{
+  "type": "music.generate",
+  "provider": "suno",
+  "input": {
+    "prompt": "lo-fi 钢琴曲，节奏舒缓",
+    "duration_sec": 60
+  }
+}
+```
+
+响应 202 Accepted：
+
+```json
+{
+  "id": "job_xxx",
+  "type": "music.generate",
+  "status": "pending",
+  "created_at": "..."
+}
+```
+
+**SSE 进度流**（可选订阅）：
+
+```
+GET /api/v1/jobs/{id}/events
+
+data: {"status": "running", "progress": 0.1}
+data: {"status": "running", "progress": 0.45}
+data: {"status": "running", "progress": 0.92}
+data: {"status": "succeeded", "progress": 1.0, "result_file_ids": ["file_xxx"]}
+data: [DONE]
+```
+
+**为什么 1.0 就定义**：
+- 音乐/视频/图片生成 2.0+ 全部异步
+- chat 流式和能力级 Job 是两套模式，但前端要统一处理
+- 现在写 = 一次到位；2.0 临时加 = 改 4 处（API、routing、UI、状态机）
+
+**1.0 落地**：协议层完整定义，路由 501 占位返回。Phase X 实施时实现 Job 调度器（goroutine pool + 状态机 + SQLite 持久化）。
+
+### 1.5 预留接口（1.0 不实现，2.0 启用）
 
 | 接口 | 用途 | 触发场景 |
 |------|------|---------|

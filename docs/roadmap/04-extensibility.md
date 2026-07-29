@@ -106,6 +106,7 @@ src/components/music/{LyricsInput.vue, StyleSelector.vue, Player.vue}
    - 提交 → 拿到 job_id
    - 订阅进度（SSE 或轮询）
    - 完成后取结果
+   协议层见 [统一协议 §1.4 异步任务（Job）](api/01-protocol.md#14-异步任务job)
 3. **文件存储复用**。生成出来的音频/视频 URL 走同一个 `/api/v1/files/{id}` 体系，前端不关心是用户上传的还是 AI 生成的。
 
 ## 四、Provider 增加 vs Modality 增加
