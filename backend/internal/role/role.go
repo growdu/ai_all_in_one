@@ -19,6 +19,7 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/core"
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/mockprovider"
+	"github.com/growdu/ai_all_in_one/backend/internal/routing"
 )
 
 // RunMaster 启动 Master 进程。
@@ -34,9 +35,14 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 		return err == nil || os.IsNotExist(err)
 	}
 
-	// 初始化 Provider Registry（1.0 阶段只有 mock）
+	// 初始化 Provider Registry（1.0 阶段注册 mock + slow 用于演示）
 	reg := core.NewRegistry()
 	reg.RegisterChat(mockprovider.New())
+	reg.RegisterChat(mockprovider.NewSlow())
+
+	// Routing：4 因子打分 + 滑动窗口
+	signals := routing.NewWindow(200, 0)
+	router := routing.NewRouter(reg, signals, routing.DefaultWeights(), 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", observability.HealthHandler(dbOK))
@@ -45,6 +51,7 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	mux.Handle("/api/v1/chat/completions", &api.ChatHandler{
 		Logger:    logger,
 		Registry:  reg,
+		Router:    router,
 		AuthToken: os.Getenv("AIIO_AUTH_TOKEN"),
 	})
 

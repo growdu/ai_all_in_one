@@ -11,19 +11,24 @@ import (
 
 	"github.com/growdu/ai_all_in_one/backend/internal/core"
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
+	"github.com/growdu/ai_all_in_one/backend/internal/routing"
 )
 
 // ChatHandler 处理 /api/v1/chat/completions
 //
 // 1.0 阶段：
 //   - 鉴权：Authorization: Bearer <token>，1.0 简化版 token == cfg.JWTSecret
-//   - 路由：single 模式从 req.Model 前缀推断 provider（如 "doubao-1-5-pro" → doubao）
+//   - 路由：
+//     single:  req.Model 前缀推断 provider
+//     auto:    req.Model == "auto" → 4 因子打分选 1，失败 fallback 1 次
+//     compare: req.Compare != nil → 并行发 N 个 provider
 //   - 流式透传：SSE chunk 直接转给上游，OpenAI 兼容格式
 //   - 错误：统一 ErrorResponse 结构（docs/api/01-protocol.md §四）
 type ChatHandler struct {
 	Logger    *slog.Logger
 	Registry  *core.Registry
-	AuthToken string // 1.0 简化：非空即要求；2.0 接 JWT
+	AuthToken string     // 1.0 简化：非空即要求；2.0 接 JWT
+	Router    *routing.Router // single 模式可空，auto/compare 必须
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -51,22 +56,119 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	const userKey = "PLACEHOLDER_USER_KEY" // 1.0 简化；Phase 4 接入
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	// ---- 路由模式分发 ----
+	switch {
+	case req.Compare != nil:
+		// compare 模式
+		h.serveCompare(ctx, w, req, userKey)
+		return
+	case req.Model == "auto":
+		// auto 模式
+		h.serveAuto(ctx, w, req, userKey)
+		return
+	}
+
+	// single 模式（默认）
 	provider, err := h.Registry.GetChat(inferProviderFromModel(req.Model))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "model_not_found", "model not found: "+req.Model, "", 0)
 		return
 	}
 
-	const userKey = "PLACEHOLDER_USER_KEY" // 1.0 简化；Phase 4 接入
-
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-
 	if req.Stream {
 		h.serveStream(ctx, w, provider, req, userKey)
 		return
 	}
 	h.serveComplete(ctx, w, provider, req, userKey)
+}
+
+// serveAuto auto 模式：打分选 1 + 失败 fallback
+func (h *ChatHandler) serveAuto(ctx context.Context, w http.ResponseWriter, req core.ChatRequest, userKey string) {
+	if h.Router == nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "router not configured", "", 0)
+		return
+	}
+	candidates := h.Registry.ChatProviders()
+	if len(candidates) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "no_provider_configured", "no provider configured", "", 0)
+		return
+	}
+
+	if req.Stream {
+		// auto + stream: 先选 1，再走 serveStream
+		chosen, err := h.Router.PickProvider(ctx, req, candidates)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), "", 0)
+			return
+		}
+		// 用 chosen 第一个 model 调
+		req.Model = firstModelOfProvider(h.Registry, chosen)
+		provider, _ := h.Registry.GetChat(chosen)
+		h.serveStream(ctx, w, provider, req, userKey)
+		return
+	}
+
+	resp, _, err := h.Router.AutoChat(ctx, req, candidates, userKey)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "all_providers_failed", err.Error(), "", 0)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+	observability.RecordChat(resp.Provider, req.Model, true, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+}
+
+// serveCompare compare 模式：并行发 N 个 provider
+func (h *ChatHandler) serveCompare(ctx context.Context, w http.ResponseWriter, req core.ChatRequest, userKey string) {
+	if h.Router == nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "router not configured", "", 0)
+		return
+	}
+	candidates := req.Compare.Providers
+	if len(candidates) == 0 {
+		candidates = h.Registry.ChatProviders()
+	}
+	if len(candidates) < 2 {
+		writeError(w, http.StatusBadRequest, "only_one_provider", "compare requires >= 2 providers", "", 0)
+		return
+	}
+
+	if req.Stream {
+		// compare + stream: 暂不实现 1.0，返回 501
+		writeError(w, http.StatusNotImplemented, "not_implemented", "compare+stream Phase 2.5 stream variant", "", 0)
+		return
+	}
+
+	results, err := h.Router.Compare(ctx, req, candidates, userKey)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error(), "", 0)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"id":      "compare-" + req.Model,
+		"compare": map[string]any{"results": results},
+	})
+}
+
+// firstModelOfProvider 取 provider 第一个 model id（auto+stream 用）
+func firstModelOfProvider(reg *core.Registry, name string) string {
+	p, err := reg.GetChat(name)
+	if err != nil {
+		return name + "-default"
+	}
+	models := p.ListModels()
+	if len(models) == 0 {
+		return name + "-default"
+	}
+	return models[0].ID
 }
 
 func (h *ChatHandler) serveComplete(ctx context.Context, w http.ResponseWriter, provider core.ChatProvider, req core.ChatRequest, userKey string) {
@@ -89,8 +191,9 @@ func (h *ChatHandler) serveStream(ctx context.Context, w http.ResponseWriter, pr
 	}
 	defer closer.Close()
 
-	flusher, _ := w.(http.Flusher) // 保留供调试；正式 flush 用 w 直接断言
-	_ = flusher
+	// 提前探测 http.Flusher 透传能力（statusRecorder 需实现 Flush）
+	// 真正 flush 走 w 直接断言绕开 statusRecorder 包装
+	_, _ = w.(http.Flusher)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

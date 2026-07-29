@@ -10,7 +10,7 @@
 | 0 | 项目脚手架（Gin / health / 配置 / Docker） | ✅ 完成 | build/vet/test 全过，/health 200，/metrics 返回 Prometheus 文本 |
 | 1 | 核心抽象（Modality / Provider / Registry） | ✅ 完成 | 12 tests 通过（Modality 2 / ModelInfo 4 / Registry 4 / 其他 2） |
 | 2 | Master chat 端到端（single 模式流式） | ✅ 完成 | mock provider + 真实 http server，7 tests + 端到端 stream 验证通过 |
-| 2.5 | Routing 进阶（auto / compare） | 待办 | — |
+| 2.5 | Routing 进阶（auto / compare） | ✅ 完成 | 9 routing tests + 端到端 auto/compare 验证通过 |
 | 3 | Worker role（豆包/DeepSeek/Kimi Provider） | 待办 | — |
 | 4 | Key 管理（SQLite + AES-GCM） | 待办 | — |
 | 5 | 前端 MVP（Vue3 + SSE + 5 页） | 待办 | — |
@@ -46,7 +46,14 @@ backend/
 │   ├── providers/                          # Phase 2: mock provider
 │   │   └── mockprovider/                   # 不依赖外部 API 的回显 provider
 │   │       ├── mock.go
-│   │       └── mock_test.go                # 5 tests
+│   │       ├── mock_test.go                # 5 tests
+│   │       └── slow.go                     # 慢速回显（演示 auto 模式 fallback）
+│   ├── routing/                            # Phase 2.5: 4 因子打分 + 路由
+│   │   ├── signals.go                      # 滑动窗口
+│   │   ├── scoring.go                      # 4 因子打分公式
+│   │   ├── scoring_test.go                 # 5 tests
+│   │   ├── router.go                       # single/auto/compare 三模式
+│   │   └── router_test.go                  # 4 tests
 │   └── role/                               # Master/Worker 启动
 │       └── role.go
 ```
@@ -91,6 +98,32 @@ curl -s -N -X POST http://localhost:18080/api/v1/chat/completions \
 
 **关键发现**：`observability.LogRequest` 中间件的 `statusRecorder` 必须实现 `http.Flusher`，否则 SSE 流式失效。已在 Phase 2 修复。
 
+## 端到端验证（Phase 2.5 auto/compare）
+
+```bash
+# auto 模式：冷启动打分，2 个候选（mock + slow）
+curl -X POST http://localhost:18080/api/v1/chat/completions \
+  -H "Authorization: Bearer devtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
+# → {"provider":"slow","content":"slow: hi",...}
+# 冷启动时两 provider 平手，按 Registry 迭代顺序取最后一个
+
+# compare 模式：并行发 2 个 provider
+curl -X POST http://localhost:18080/api/v1/chat/completions \
+  -H "Authorization: Bearer devtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"x","messages":[{"role":"user","content":"hi"}],"compare":{"providers":["mock","slow"]}}'
+# → {"compare":{"results":[{"provider":"mock","status":"succeeded",...},{"provider":"slow",...}]}}
+```
+
+**实现要点**：
+- 4 因子打分：`0.4*success_rate + 0.2*(1-latency_norm) + 0.3*user_pref + 0.1*capability`
+- 冷启动 0 信号：所有 provider 平手（score=0.5 中立值）
+- 滑动窗口 200 条/Provider，1.0 内存存储
+- auto 失败 fallback 1 次（max_auto_fallback=1）
+- compare 模式 1.0 不支持 stream（流式变体留 2.0）
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -117,5 +150,6 @@ go test ./...
 |------|--------|-------|------|
 | 2026-07-29 | 9888955 | 0 | 项目脚手架：config / observability / role / health/metrics 端点 |
 | 2026-07-29 | c567951 | 1 | 核心抽象：Modality / 统一数据模型 / ChatProvider interface / Registry |
-| 2026-07-29 | (pending) | 2 | Master chat 端到端：chat handler + models handler + mock provider + SSE 流式透传 |
+| 2026-07-29 | be2a8e1 | 2 | Master chat 端到端：chat handler + models handler + mock provider + SSE 流式透传 |
+| 2026-07-29 | (pending) | 2.5 | Routing：4 因子打分 + 滑动窗口 + single/auto/compare 三模式 |
 
