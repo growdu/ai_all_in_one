@@ -83,6 +83,7 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 		Registry:  reg,
 		Router:    router,
 		Keyring:   keyring,
+		FileStore: fileStore,
 		AuthToken: os.Getenv("AIIO_AUTH_TOKEN"),
 	})
 

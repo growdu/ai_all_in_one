@@ -16,6 +16,7 @@
 | 4.5 | Keyring ↔ chat 路由集成 | ✅ 完成 | 4 chat keyring tests + 端到端 4 场景（无 key 400 / 有 key 200 / auto 部分无 key fallback） |
 | 5 | 前端 MVP（HTML+JS 5 页） | ✅ 完成（1.0 极简版，5 HTML + 5 JS + 1 CSS） | 静态文件服务 + API 共存，端到端 GET 4 页 + 3 资源 + /api/v1/models 全 200 |
 | 6 | 文件上传 + 多模态 | ✅ 完成（本地文件系统 + 截断） | 10 storage tests + 8 file handler tests + 端到端 upload/list/reject |
+| 6.5 | 附件注入 chat 链路 | ✅ 完成（file_id → messages） | 6 preprocessing tests + 端到端上传→chat→AI 看到附件内容 |
 | 7 | 移动端打磨 | 待办 | — |
 | 8 | 部署与文档 | ✅ 完成 | Dockerfile 写好、docker-compose.yml 通过 `docker compose config` 校验、deploy.md + user-guide.md + .env.example 完整 |
 
@@ -39,17 +40,22 @@ backend/
 │   │   ├── models_test.go                  # 4 tests
 │   │   ├── registry.go                     # ChatProvider interface + Registry
 │   │   └── registry_test.go                # 4 tests
-│   ├── api/                                # Phase 2 + 4 + 4.5: HTTP handlers
-│   │   ├── chat.go                         # /api/v1/chat/completions（单/auto/compare + Keyring 注入）
+│   ├── api/                                # Phase 2 + 4 + 4.5 + 6: HTTP handlers
+│   │   ├── chat.go                         # /api/v1/chat/completions（单/auto/compare + Keyring + 附件注入）
 │   │   ├── chat_test.go                    # 7 tests
 │   │   ├── chat_keyring_test.go            # 4 tests（Keyring 集成）
 │   │   ├── models.go                       # /api/v1/models
 │   │   ├── models_test.go                  # 2 tests
 │   │   ├── keys.go                         # /api/v1/keys CRUD
-│   │   └── keys_test.go                    # 6 tests
-│   ├── providers/                          # Phase 2 + 3
-│   │   ├── mockprovider/                   # 不依赖外部 API 的回显 provider
-│   │   │   ├── mock.go
+│   │   ├── keys_test.go                    # 6 tests
+│   │   ├── files.go                        # /api/v1/files CRUD
+│   │   ├── files_test.go                   # 8 tests
+│   │   └── codec.go                        # jsonEncode helper
+│   ├── capabilities/                       # Phase 1.1: 业务能力
+│   │   └── chat/
+│   │       └── preprocessing/              # 附件预处理（file_id → text）
+│   │           ├── preprocessor.go         # 注入逻辑
+│   │           └── preprocessor_test.go    # 6 tests
 │   │   │   ├── mock_test.go                # 5 tests
 │   │   │   └── slow.go                     # 慢速回显
 │   │   ├── openaicompat/                   # Phase 3: OpenAI 兼容基类
@@ -430,10 +436,76 @@ cat /data/file_index.json         # → _files 索引
 - 1.0 不做文件级权限（所有上传归 "default"）
 - 2.0 升级：图片压缩、PDF 抽文本、多用户隔离、Office 支持
 
-**已知 1.0 限制**（待 Phase 1.1）：
-- chat 不读 attachments：文件存了但 chat handler 没把 file_id 注入 messages
-- 1.0 阶段：文件存储 + 列表 + 删除可工作，chat 端集成留 1.1
-- Phase 1.1 计划：chat.go 加 file_id → file content 注入 + 截断 + 重新组装 messages
+**已知 1.0 限制**（待 Phase 1.1+）：
+- ~~chat 不读 attachments~~ ✅ Phase 1.1 已解决
+- ~~file_id 注入 messages~~ ✅ Phase 1.1 已解决
+- 历史会话：未实现（前端占位）
+- 1.0 简化：图片类附件只标注 mime，不做 vision 抽取（让用户描述）
+
+## 端到端验证（Phase 1.1 附件注入）
+
+```bash
+# 1. 上传文件
+curl -X POST .../files -F "file=@test.txt;type=text/plain"
+# → 201 + file_id
+
+# 2. chat with attachment
+curl -X POST .../chat/completions -d '{
+  "model":"mock-echo",
+  "messages":[{
+    "role":"user",
+    "content":"看下这个文件",
+    "attachments":["file_xxx"]
+  }]
+}'
+# → 200 + AI echo 出来看到完整附件内容
+```
+
+**实际 mock echo 收到**：
+
+```
+echo: [附件: test.txt (text/plain, 37 字节)]
+This is the file content for testing.
+
+---
+
+看下这个文件说了什么
+```
+
+格式约定：
+```
+[附件: filename (mime, size 字节, → 截断到 size 字节)]
+<文件内容>
+
+---
+
+<原用户消息>
+```
+
+**核心实现**：
+- `internal/capabilities/chat/preprocessing/preprocessor.go`
+  - 遍历 messages 找 `attachments` 字段
+  - 从 FileStore 读 file_id 对应的内容和元信息
+  - 注入到 message content 前面
+  - system 消息不动（保护 system prompt）
+  - owner 校验：跨用户访问被跳过 + 警告
+- `internal/api/chat.go` 在路由前调用 Preprocessor
+  - `req.Messages` 被替换为处理后的版本
+  - 后续 Provider 拿到的就是带附件内容的 messages
+
+**测试覆盖**（6 tests）：
+- 小文件 → 完整内容
+- 大文件 → 截断 + 警告
+- 多附件 → 全部注入
+- 无附件 → 不变
+- 跨用户 → 跳过 + 警告
+- system 消息保护
+
+**1.0 简化**：
+- 图片附件不抽取（标注 mime + 让用户描述）
+- PDF 附件 1.0 阶段按文本注入（FileStore 已存原文）
+- 不做 token 估算（让 Provider 自己处理）
+- 不做 PDF 抽文本（留 2.0）
 
 ## 实施规则
 
@@ -468,5 +540,6 @@ go test ./...
 | 2026-07-29 | fea0b47 | 3 | Worker + 豆包/DeepSeek/Kimi OpenAI 兼容 Provider |
 | 2026-07-29 | 651db93 | 5 | 前端 MVP：4 HTML + 5 JS + 1 CSS，零构建工具，i18n zh/en |
 | 2026-07-29 | fb086c7 | 8 | 部署：Dockerfile + docker-compose.yml + .env.example + deploy.md + user-guide.md |
-| 2026-07-29 | (pending) | 6 | 文件上传：本地文件系统 + 截断 + mime 校验 + 端到端 upload/list/reject |
+| 2026-07-29 | 0efe4c0 | 6 | 文件上传：本地文件系统 + 截断 + mime 校验 + 端到端 upload/list/reject |
+| 2026-07-29 | (pending) | 6.5 | 附件注入 chat：preprocessing 把 file_id 解析为文本注入 messages |
 

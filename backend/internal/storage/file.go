@@ -130,6 +130,21 @@ func (s *FileStore) GetMeta(id, ownerID string) (*FileMeta, error) {
 	return &meta, nil
 }
 
+// GetMetaAndContent 一次返回元信息和内容（避免双重读锁）
+func (s *FileStore) GetMetaAndContent(id, ownerID string) (*FileMeta, []byte, error) {
+	s.mu.RLock()
+	meta, ok := s.indexes[id]
+	s.mu.RUnlock()
+	if !ok || meta.OwnerID != ownerID {
+		return nil, nil, ErrFileNotFound
+	}
+	data, err := os.ReadFile(s.pathFor(id))
+	if err != nil {
+		return nil, nil, err
+	}
+	return &meta, data, nil
+}
+
 // Delete 删文件
 func (s *FileStore) Delete(id, ownerID string) error {
 	s.mu.Lock()

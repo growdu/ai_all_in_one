@@ -13,6 +13,8 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
 	"github.com/growdu/ai_all_in_one/backend/internal/routing"
 	"github.com/growdu/ai_all_in_one/backend/internal/security"
+	"github.com/growdu/ai_all_in_one/backend/internal/storage"
+	"github.com/growdu/ai_all_in_one/backend/internal/capabilities/chat/preprocessing"
 )
 
 // placeholderUserKey 1.0 阶段：Keyring 未配置或 Provider 无 Key 时 fallback
@@ -37,6 +39,7 @@ type ChatHandler struct {
 	AuthToken string         // 1.0 简化：非空即要求；2.0 接 JWT
 	Router    *routing.Router // single 模式可空，auto/compare 必须
 	Keyring   *security.Keyring // 1.0 简化：nil 时 fallback placeholder
+	FileStore *storage.FileStore  // Phase 1.1：附件注入；nil 时跳过
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +65,17 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "internal_error", "invalid JSON: "+err.Error(), "", 0)
 		return
+	}
+
+	// Phase 1.1：附件预处理（file_id → 文本注入 messages）
+	if h.FileStore != nil {
+		prep := preprocessing.NewPreprocessor(h.FileStore, "default")
+		processed, _, err := prep.Process(r.Context(), req)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "preprocess: "+err.Error(), "", 0)
+			return
+		}
+		req.Messages = processed.Messages
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
