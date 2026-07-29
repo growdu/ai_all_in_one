@@ -62,6 +62,7 @@
 - **安全**：用户 Key 在 Master 用 AES-GCM 加密落库，永不出 Master 到前端；Worker 收到的 Key 仅在内存中转发
 - **多区域**：Master 与 Worker 拆分，Worker 部署在厂商就近区域（豆包国内、OpenAI 美西等），单二进制按 `AIIO_ROLE` 切换角色
 - **协议兼容**：对外接口遵循 OpenAI Chat Completions 规范，前端可零成本切到任何 OpenAI 兼容客户端
+- **首次使用门槛**：≤ 30 秒配 1 个 Key 即可开始聊天（onboarding 设计见 frontend 文档）
 
 ## 四、技术选型
 
