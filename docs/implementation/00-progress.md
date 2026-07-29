@@ -17,7 +17,7 @@
 | 5 | 前端 MVP（HTML+JS 5 页） | ✅ 完成（1.0 极简版，5 HTML + 5 JS + 1 CSS） | 静态文件服务 + API 共存，端到端 GET 4 页 + 3 资源 + /api/v1/models 全 200 |
 | 6 | 文件上传 + 多模态 | ✅ 完成（本地文件系统 + 截断） | 10 storage tests + 8 file handler tests + 端到端 upload/list/reject |
 | 6.5 | 附件注入 chat 链路 | ✅ 完成（file_id → messages） | 6 preprocessing tests + 端到端上传→chat→AI 看到附件内容 |
-| 7 | 移动端打磨 | 待办 | — |
+| 7 | 移动端打磨（暗色 / a11y / PWA） | ✅ 完成 | CSS 暗色变量 + prefers-color-scheme + 主题切换；aria-label + focus 环 + 44pt 触摸目标；PWA manifest.webmanifest 合法 |
 | 8 | 部署与文档 | ✅ 完成 | Dockerfile 写好、docker-compose.yml 通过 `docker compose config` 校验、deploy.md + user-guide.md + .env.example 完整 |
 
 ## 已落地模块
@@ -507,6 +507,76 @@ This is the file content for testing.
 - 不做 token 估算（让 Provider 自己处理）
 - 不做 PDF 抽文本（留 2.0）
 
+## 端到端验证（Phase 7 移动端打磨）
+
+```bash
+# 1. PWA manifest
+curl http://localhost:18080/manifest.webmanifest | jq
+# {
+#   "name": "AI All-in-One",
+#   "short_name": "AIIO",
+#   "start_url": "/home.html",
+#   "display": "standalone",
+#   "theme_color": "#4f46e5",
+#   "icons": [{"src": "...","sizes":"192x192"}, {"src":"...","sizes":"512x512","purpose":"any maskable"}]
+# }
+
+# 2. 暗色 CSS 变量
+curl -s http://localhost:18080/style.css | grep 'data-theme="dark"'
+# → :root[data-theme="dark"] {
+# →   --bg: #0f0f0f;
+# →   --bg-card: #1a1a1a;
+# →   ...
+
+# 3. a11y 属性
+curl -s http://localhost:18080/home.html | grep 'aria-'
+# → role="log" aria-live="polite" aria-label="消息列表"
+# → aria-label="停止生成" / "发送消息"
+# → aria-label="主题切换" / "语言切换"
+
+# 4. 主题色 meta（移动浏览器状态栏）
+curl -s http://localhost:18080/home.html | grep theme-color
+# → <meta name="theme-color" content="#4f46e5" />
+```
+
+**核心增强**：
+
+### 暗色模式
+- 全部颜色改为 CSS 变量（`--bg` `--text` `--primary` 等 20+ 变量）
+- 3 模式：auto（跟随系统）/ light / dark
+- localStorage 持久化用户选择
+- 暗色配色专门调过（背景 #0f0f0f 不是纯黑，护眼）
+
+### a11y 改进
+- 所有交互元素加 `aria-label`
+- 消息区 `role="log" aria-live="polite"`（屏幕阅读器自动播报新消息）
+- 主题/语言选择器加 `<label>` + visually-hidden
+- 焦点环：`outline: 2px solid var(--focus-ring)` 替代浏览器默认
+- `prefers-reduced-motion` 尊重动画偏好
+
+### 触摸目标
+- 所有 button / select / input `min-height: 44px`（Apple HIG 标准）
+- 表单元素 padding 加大
+- 关键按钮 `min-width: 44px`
+
+### PWA
+- `manifest.webmanifest` 合法（name/short_name/start_url/icons/display/theme_color/background_color）
+- 2 个 icon（192 + 512 maskable，纯 inline SVG，无外部资源）
+- 顶栏加 `<link rel="manifest">` + `<meta name="theme-color">`
+- 1.0 不做 service worker 离线缓存（保持简单）
+
+**端到端验证**：
+- 4 个 HTML 文件 200 + 含 theme-color meta
+- /manifest.webmanifest 200 + 合法 JSON
+- style.css 320 行（之前 200 行）+ 暗色 + 触摸目标 + a11y
+- 浏览器 DevTools 模拟暗色：CSS 变量自动切换
+
+**1.0 不做**（留 P1/P2）：
+- service worker 离线缓存（基础网络假设始终可用）
+- 推送通知
+- 桌面快捷方式（macOS dock / Windows taskbar）
+- 长按 / 滑动 / 拖拽等高级手势
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -541,5 +611,6 @@ go test ./...
 | 2026-07-29 | 651db93 | 5 | 前端 MVP：4 HTML + 5 JS + 1 CSS，零构建工具，i18n zh/en |
 | 2026-07-29 | fb086c7 | 8 | 部署：Dockerfile + docker-compose.yml + .env.example + deploy.md + user-guide.md |
 | 2026-07-29 | 0efe4c0 | 6 | 文件上传：本地文件系统 + 截断 + mime 校验 + 端到端 upload/list/reject |
-| 2026-07-29 | (pending) | 6.5 | 附件注入 chat：preprocessing 把 file_id 解析为文本注入 messages |
+| 2026-07-29 | 9db371f | 6.5 | 附件注入 chat：preprocessing 把 file_id 解析为文本注入 messages |
+| 2026-07-29 | (pending) | 7 | 移动端打磨：暗色模式 + a11y + PWA manifest + 44pt 触摸目标 |
 

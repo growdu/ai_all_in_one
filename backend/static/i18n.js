@@ -1,10 +1,11 @@
-// i18n.js — 极简 i18n（zh/en）
-// 1.0 简化：localStorage 存 lang 选择
+// i18n.js — 极简 i18n（zh/en）+ 主题切换
+// 1.0 简化：localStorage 存 lang 和 theme
 // 详见 docs/frontend/03-web.md §八
 
 const translations = {
   zh: {
-    app: { title: 'AI 助手', settings: '设置' },
+    app: { title: 'AI 助手', settings: '设置', theme: '主题' },
+    theme: { light: '浅色', dark: '深色', auto: '自动' },
     onboarding: {
       welcome: '欢迎使用 AI 助手',
       intro: '先选一个 AI 服务配 API Key，开始使用',
@@ -53,7 +54,8 @@ const translations = {
     },
   },
   en: {
-    app: { title: 'AI Assistant', settings: 'Settings' },
+    app: { title: 'AI Assistant', settings: 'Settings', theme: 'Theme' },
+    theme: { light: 'Light', dark: 'Dark', auto: 'Auto' },
     onboarding: {
       welcome: 'Welcome to AI Assistant',
       intro: 'Choose an AI service to add an API key, then start using it',
@@ -121,7 +123,6 @@ const I18n = {
     }
     return cur == null ? key : cur;
   },
-  // 把 data-i18n="key" 的元素替换成 t(key)
   apply(root = document) {
     root.querySelectorAll('[data-i18n]').forEach(el => {
       el.textContent = I18n.t(el.getAttribute('data-i18n'));
@@ -129,17 +130,45 @@ const I18n = {
     root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       el.placeholder = I18n.t(el.getAttribute('data-i18n-placeholder'));
     });
+    root.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+      el.setAttribute('aria-label', I18n.t(el.getAttribute('data-i18n-aria-label')));
+    });
   },
-  // 初始化顶栏语言切换
+
+  // ---- 主题 ----
+  get theme() {
+    return localStorage.getItem('aiio.theme') || 'auto';
+  },
+  set theme(v) {
+    localStorage.setItem('aiio.theme', v);
+    I18n.applyTheme();
+  },
+  applyTheme() {
+    const t = I18n.theme;
+    if (t === 'auto') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', t);
+    }
+  },
+
+  // ---- 顶栏初始化（语言 + 主题） ----
   initSwitch() {
-    const sel = document.getElementById('lang-switch');
-    if (!sel) return;
-    sel.value = I18n.lang;
-    sel.addEventListener('change', () => { I18n.lang = sel.value; });
+    const langSel = document.getElementById('lang-switch');
+    if (langSel) {
+      langSel.value = I18n.lang;
+      langSel.addEventListener('change', () => { I18n.lang = langSel.value; });
+    }
+    const themeSel = document.getElementById('theme-switch');
+    if (themeSel) {
+      themeSel.value = I18n.theme;
+      themeSel.addEventListener('change', () => { I18n.theme = themeSel.value; });
+    }
   },
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  I18n.applyTheme();
   I18n.initSwitch();
   I18n.apply();
 });

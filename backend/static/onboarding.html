@@ -3,26 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="description" content="AI All-in-One：统一大模型入口" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
   <title>AI All-in-One</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
+  <header class="topbar" role="banner">
     <a href="home.html" class="logo">AI 助手</a>
     <div class="topbar-right">
-      <select id="lang-switch">
+      <label for="theme-switch" class="visually-hidden" data-i18n-aria-label="app.theme">主题</label>
+      <select id="theme-switch" aria-label="主题切换">
+        <option value="auto">🌓</option>
+        <option value="light">☀️</option>
+        <option value="dark">🌙</option>
+      </select>
+      <label for="lang-switch" class="visually-hidden" data-i18n-aria-label="app.lang">语言</label>
+      <select id="lang-switch" aria-label="语言切换">
         <option value="zh">中文</option>
         <option value="en">English</option>
       </select>
-      <a href="settings.html" data-i18n="settings">设置</a>
+      <a href="settings.html" data-i18n="app.settings">设置</a>
     </div>
   </header>
 
-  <main class="container">
+  <main class="container" role="main">
     <h1 data-i18n="onboarding.welcome">欢迎使用 AI 助手</h1>
     <p data-i18n="onboarding.intro">先选一个 AI 服务配 API Key，开始使用</p>
 
-    <div class="grid" id="provider-grid">
+    <div class="grid" id="provider-grid" role="list" aria-live="polite">
       <!-- 动态生成 provider 卡片 -->
     </div>
 
@@ -30,6 +41,8 @@
       <a href="home.html" class="btn-secondary" data-i18n="onboarding.skip">跳过</a>
     </div>
   </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" style="display:none"></div>
 
   <script src="i18n.js"></script>
   <script src="app.js"></script>

@@ -138,3 +138,13 @@ const App = {
     localStorage.setItem('aiio.advanced', JSON.stringify(v));
   },
 };
+
+// ---- Toast helper（global） ----
+function showToast(msg, duration = 3000) {
+  const el = document.getElementById('toast');
+  if (!el) { alert(msg); return; }
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, duration);
+}

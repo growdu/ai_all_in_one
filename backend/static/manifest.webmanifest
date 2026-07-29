@@ -1,0 +1,27 @@
+{
+  "name": "AI All-in-One",
+  "short_name": "AIIO",
+  "description": "统一大模型入口：豆包 / OpenAI / DeepSeek / Kimi 一处配置",
+  "start_url": "/home.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%234f46e5' width='192' height='192' rx='32'/><text x='96' y='130' font-size='120' text-anchor='middle' fill='white'>🤖</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%234f46e5' width='512' height='512' rx='80'/><text x='256' y='360' font-size='320' text-anchor='middle' fill='white'>🤖</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "developer"],
+  "screenshots": []
+}
