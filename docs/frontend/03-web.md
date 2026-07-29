@@ -289,6 +289,73 @@ export const $api = ofetch.create({
 });
 ```
 
+### 6.1 错误 i18n 映射（review 3.2）
+
+> 后端只发 `code` + 可选 `user_message_key`，前端按 lang 渲染。
+
+**映射表**（`src/i18n/zh.ts`）：
+
+```ts
+export const errors: Record<string, string> = {
+  // 鉴权
+  auth_missing: '请先登录',
+  auth_invalid: '登录已过期，请重新登录',
+  // 资源
+  model_not_found: '该模型暂不可用',
+  no_provider_configured: '请先在设置里配置至少一个 AI 服务的 Key',
+  no_capable_provider: '当前问题需要的能力（如识图）没有可用的模型',
+  // 限流
+  user_rate_limit: '请求过于频繁，请稍后再试',
+  provider_rate_limit: '服务商繁忙，请稍后重试',
+  system_overload: '服务暂时繁忙，请稍后重试',
+  // 网络
+  upstream_timeout: '网络超时，请检查连接后重试',
+  // 对比模式
+  only_one_provider: '对比模式需要至少配置 2 个 AI 服务',
+  all_providers_failed: '所有 AI 服务都失败了，请稍后重试',
+  // 兜底
+  internal_error: '服务暂时不可用，请稍后重试',
+}
+```
+
+**英文版**（`src/i18n/en.ts`）：
+
+```ts
+export const errors: Record<string, string> = {
+  auth_missing: 'Please sign in first',
+  auth_invalid: 'Your session has expired, please sign in again',
+  model_not_found: 'This model is currently unavailable',
+  no_provider_configured: 'Please configure at least one AI service key in Settings',
+  no_capable_provider: 'No available model supports the required capability (e.g. vision)',
+  user_rate_limit: 'Too many requests, please slow down',
+  provider_rate_limit: 'The AI service is busy, please retry later',
+  system_overload: 'The service is busy, please retry later',
+  upstream_timeout: 'Network timeout, please check your connection',
+  only_one_provider: 'Compare mode requires at least 2 AI services',
+  all_providers_failed: 'All AI services failed, please retry later',
+  internal_error: 'Service temporarily unavailable',
+}
+```
+
+**接入 useChat 错误处理**：
+
+```typescript
+import { errors } from '@/i18n/zh'
+
+function showError(err: ApiError) {
+  // 优先级：i18n 表 → 后端 user_message_key → 后端 message
+  let msg = errors[err.code]
+  if (!msg && err.user_message_key) msg = errors[err.user_message_key]
+  if (!msg) msg = err.message || 'Unknown error'
+  showToast(msg)
+}
+```
+
+**关键原则**：
+- 1.0 前端维护 i18n 表，2.0 后端可在错误里直接带 user_message_key 覆盖
+- i18n key 找不到时降级用 `message` 字段（开发友好）
+- **前端永远不直接展示 `message` 字段**（后端 message 是开发用的，可能带堆栈）
+
 ## 七、移动端 H5 适配
 
 - viewport meta：`width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no`
