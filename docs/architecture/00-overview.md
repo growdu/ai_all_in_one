@@ -12,7 +12,7 @@
                │  统一协议（见 docs/api/01-protocol.md）
                ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                    API Gateway (FastAPI)                      │
+│                    API Gateway (Gin)                          │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────────────┐ │
 │  │ Auth/KeyMgr │  │ RateLimit    │  │ Usage/Billing 预留   │ │
 │  └─────────────┘  └──────────────┘  └──────────────────────┘ │
@@ -57,9 +57,10 @@
 ## 三、关键非功能性需求
 
 - **可观测性**：所有 Provider 调用记录 latency / token / cost（预留 billing 接口）
-- **可降级**：单个 Provider 不可用时前端可看到状态并切换
-- **可灰度**：通过 Provider Registry 的优先级配置做灰度
-- **安全**：用户 Key 在后端用 Fernet 加密落库，永不出后端到前端
+- **可降级**：单个 Provider / Worker 不可用时前端可看到状态并切换
+- **可灰度**：通过 Provider Registry 的优先级配置做灰度；Worker 维度天然支持区域灰度
+- **安全**：用户 Key 在 Master 用 AES-GCM 加密落库，永不出 Master 到前端；Worker 收到的 Key 仅在内存中转发
+- **多区域**：Master 与 Worker 拆分，Worker 部署在厂商就近区域（豆包国内、OpenAI 美西等），单二进制按 `AIIO_ROLE` 切换角色
 - **协议兼容**：对外接口遵循 OpenAI Chat Completions 规范，前端可零成本切到任何 OpenAI 兼容客户端
 
 ## 四、技术选型
@@ -68,10 +69,13 @@
 |---|------|------|
 | 前端 Web | Vue 3 + Vite + Pinia + Vue Router | 国内生态成熟，移动端 H5 适配成本低 |
 | 前端 UI | Vant 5（移动）+ Element Plus（桌面）双栈 | 一套设计语言覆盖两端 |
-| 后端 | Python 3.11 + FastAPI | 异步原生、类型驱动、与 AI 生态对接最顺 |
-| 后端 HTTP | httpx (async) | 连接池、超时、重试链都好接 |
-| 数据 | SQLite (1.0) → PostgreSQL (后续) | 单机起步，零部署门槛 |
-| 部署 | Docker Compose | 1.0 用户大概率自部署 |
+| 后端运行时 | **Go 1.22+** | 静态二进制、轻量、并发高、跨区域部署成本低 |
+| 后端 Web | **Gin** | 生态成熟、中间件丰富、流式 SSE 支持好 |
+| 后端 HTTP | **net/http + fasthttp（按场景）** | 标准库即够用；极致性能场景切 fasthttp |
+| 后端架构 | **单二进制双角色** | 同一仓库同一可执行文件，按 `AIIO_ROLE` 启动为 Master 或 Worker；Master↔Worker 走 mTLS/共享 HMAC |
+| 数据 | **modernc.org/sqlite（1.0 纯 Go 驱动）→ PostgreSQL（后续）** | 零 CGO 部署；后续切 PG 不改业务代码 |
+| 加密 | AES-GCM（自实现，~80 行） | 不引入额外依赖，Key 加密 + Master↔Worker 通道封装共用 |
+| 部署 | Docker Compose（1.0）→ k8s（2.0） | 1.0 自部署，2.0 多 Worker 区域化 |
 
 ## 五、详细设计入口
 

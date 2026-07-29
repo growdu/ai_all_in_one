@@ -92,24 +92,24 @@ GET  /api/v1/files/{id}
 
 ## 二、内部接口（后端 Capability ↔ Provider）
 
-后端内部走"能力接口"，不是 HTTP，是 Python Protocol：
+后端内部走"能力接口"，不是 HTTP，是 Go interface：
 
-```python
-class ChatProvider(Protocol):
-    name: str
-    supports_stream: bool
+```go
+type ChatProvider interface {
+    Name() string
+    SupportsStream() bool
 
-    async def list_models(self) -> list[ModelInfo]: ...
-    async def chat(self, req: ChatRequest) -> AsyncIterator[ChatChunk]: ...
-    async def chat_complete(self, req: ChatRequest) -> ChatResponse: ...
-```
+    ListModels() []ModelInfo
+    Chat(ctx context.Context, req ChatRequest) <-chan ChatChunk   // 流式
+    ChatComplete(ctx context.Context, req ChatRequest) (ChatResponse, error)
+}
 
-```python
-class MusicProvider(Protocol):
-    name: str
+type MusicProvider interface {
+    Name() string
 
-    async def list_models(self) -> list[ModelInfo]: ...
-    async def generate(self, req: MusicRequest) -> AsyncIterator[MusicProgress]: ...
+    ListModels() []ModelInfo
+    Generate(ctx context.Context, req MusicRequest) <-chan MusicProgress
+}
 ```
 
 每个 Provider 实现对应模态的 Protocol。Capability 层只调接口，不 import 任何具体 Provider。

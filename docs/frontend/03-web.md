@@ -11,7 +11,7 @@
 | UI 组件 | Vant 5（移动）+ Element Plus（桌面）双栈 | 一套代码同时覆盖两端 |
 | HTTP | ofetch（Nuxt 同款，轻量） | 比 axios 体积小 60%，原生支持 SSE |
 | 样式 | Tailwind CSS + 设计变量 | 与 Vant/Element Plus 主题打通 |
-| TypeScript | 全量 | 与后端 Pydantic 类型对齐，IDE 自动补全 |
+| TypeScript | 全量 | 与后端 Go struct tag 派生类型对齐，IDE 自动补全 |
 
 **移动端 vs 桌面端如何一套代码覆盖**：
 - 用 Vant 5 作为基础组件库（移动端体验好，且在桌面浏览器也能用）
@@ -55,7 +55,7 @@ frontend/web/
 │   │   ├── useSSE.ts          # 流式响应封装
 │   │   └── useUpload.ts
 │   ├── types/
-│   │   └── api.ts             # 与后端 Pydantic 对齐
+│   │   ├── api.ts             # 与后端 Go struct 对齐
 │   ├── styles/
 │   └── utils/
 ├── public/
@@ -218,7 +218,7 @@ export interface ChatRequest {
 }
 ```
 
-后端 Pydantic 模型导出 JSON Schema，前端用 `json-schema-to-typescript` 自动生成，避免漂移。
+后端 Go struct 导出 JSON Schema，前端用 `json-schema-to-typescript` 自动生成，避免漂移。
 
 ## 六、错误处理
 

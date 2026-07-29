@@ -13,7 +13,7 @@
 
 - [顶层架构](architecture/00-overview.md) — Modality / Capability / Provider 三层抽象
 - [统一协议](api/01-protocol.md) — OpenAI Chat Completions 兼容契约
-- [后端 Provider 抽象](backend/02-provider.md) — FastAPI + ProviderRegistry 设计
+- [后端 Provider 抽象](backend/02-provider.md) — Go + Master/Worker 双角色设计
 - [前端 Web 设计](frontend/03-web.md) — Vue3 + 移动端 H5 适配
 - [扩展路线](roadmap/04-extensibility.md) — 音乐 / 视频 / 图片扩展步骤
 - [1.0 任务拆分](roadmap/05-mvp-tasks.md) — TDD 风格任务清单
@@ -23,7 +23,7 @@
 ```
 ai_all_in_one/
 ├── docs/                 # 本文档站（部署到 GitHub Pages）
-├── backend/              # 后端实现（Python · FastAPI）
+├── backend/              # 后端实现（Go · Gin · Master/Worker 双角色）
 ├── frontend/web/         # 前端实现（Vue3 · Web + 移动 H5）
 ├── mkdocs.yml            # 文档站配置
 └── requirements-docs.txt # 文档构建依赖

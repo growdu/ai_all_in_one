@@ -93,7 +93,7 @@ backend/
 │   │   └── sse.go               # SSE 解析（厂商→ChatChunk）
 │   │
 │   ├── security/                # 鉴权 / 加密
-│   │   ├── fernet.go            # AES-128-CBC + HMAC，Key 加密
+│   │   ├── aesgcm.go          # AES-256-GCM，Key 加密与通道封装共用
 │   │   ├── jwt.go               # 用户 token（Master 签，Worker 验）
 │   │   └── mtls.go              # Master↔Worker 双向 TLS（可选）
 │   │
@@ -193,7 +193,7 @@ AIIO_ROLE=worker AIIO_REGION=us-west AIIO_CONFIG=configs/worker-us.yaml ./aiio
 POST /internal/chat HTTP/2
 Authorization: Bearer <master-worker-shared-token>
 X-AIIO-Region: us-west
-X-AIIO-User-Key: <fernet-encrypted-by-master, decrypted-by-master-on-the-fly>  # 不落盘
+X-AIIO-User-Key: <aesgcm-encrypted-by-master, only-in-transit>  # 不落盘
 Content-Type: application/json
 
 { "model": "gpt-4o", "messages": [...], "stream": true }
@@ -290,7 +290,7 @@ providers:
 | Web 框架 | FastAPI | **Gin**（生态最广）或 Fiber（更快） |
 | ASGI vs HTTP | ASGI | net/http + Gin |
 | 异步 | asyncio | goroutine（更轻量） |
-| 加密 | cryptography.fernet | 自实现 AES-128-CBC + HMAC（~80 行，零依赖） |
+| 加密 | cryptography.fernet | 自实现 AES-256-GCM（~80 行，零依赖） |
 | 数据库 | SQLModel + SQLite | modernc.org/sqlite（**纯 Go 驱动，无需 CGO**） |
 | HTTP 客户端 | httpx | net/http + 自封装连接池（够用）/ fasthttp（极致） |
 | 流式解析 | sse_starlette | bufio.Scanner 手动解析 |

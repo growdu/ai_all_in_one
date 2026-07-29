@@ -26,39 +26,65 @@ class Modality(str, Enum):
 
 ### Step 2: 新增路由
 
-```python
-# app/capabilities/music/router.py
-router = APIRouter(prefix="/music", tags=["music"])
+```go
+// internal/api/v1/music/router.go
+package music
 
-@router.get("/models")
-async def list_music_models(): ...
+import (
+    "github.com/gin-gonic/gin"
+    "aiio/internal/core"
+)
 
-@router.post("/generate")
-async def generate_music(req: MusicRequest): ...
-    # 流式返回进度，最后返回音频 URL
+func Register(r *gin.RouterGroup) {
+    g := r.Group("/music")
+    g.GET("/models", listModels)
+    g.POST("/generate", generate)
+}
+
+func listModels(c *gin.Context) { /* ... */ }
+func generate(c *gin.Context)   {
+    // 流式返回进度，最后返回音频 URL
+}
 ```
 
 ### Step 3: 实现 Provider
 
 Suno 是异步任务模式（提交任务 → 轮询/回调 → 拿音频），跟 chat 的流式模式不同。代码量比 OpenAI 兼容 chat 多。
 
-```python
-# app/providers/suno/provider.py
-class SunoProvider:
-    name = "suno"
+```go
+// internal/providers/suno/provider.go
+package suno
 
-    async def generate(self, req: MusicRequest) -> AsyncIterator[MusicProgress]:
-        task_id = await self._submit(req)
-        while True:
-            status = await self._poll(task_id)
-            yield MusicProgress(
-                status=status.state,
-                progress=status.progress,
-                audio_url=status.audio_url,
-            )
-            if status.state in ("succeeded", "failed"):
+import (
+    "context"
+    "aiio/internal/core"
+)
+
+type Provider struct {
+    name  string
+    apiKey string
+}
+
+func (p *Provider) Name() string { return "suno" }
+
+func (p *Provider) Generate(ctx context.Context, req core.MusicRequest) <-chan core.MusicProgress {
+    out := make(chan core.MusicProgress, 8)
+    go func() {
+        defer close(out)
+        taskID := p.submit(ctx, req)
+        for {
+            status := p.poll(ctx, taskID)
+            out <- core.MusicProgress{Status: status.State, Progress: status.Progress, AudioURL: status.AudioURL}
+            if status.State == "succeeded" || status.State == "failed" {
                 return
+            }
+        }
+    }()
+    return out
+}
 ```
+
+每个 Provider 实现对应模态的接口。Capability 层只依赖接口，不 import 任何具体实现。
 
 ### Step 4: 前端新页面
 
