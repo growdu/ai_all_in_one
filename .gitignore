@@ -1,25 +1,5 @@
-# IDE / OS
-.idea/
-.vscode/
-.DS_Store
-*.swp
-
-# Python
+.cache/
+site/
 __pycache__/
 *.py[cod]
-*.egg-info/
 .venv/
-.pytest_cache/
-.ruff_cache/
-
-# Node
-node_modules/
-dist/
-.vite/
-
-# Runtime
-*.db
-*.sqlite
-.env
-.env.local
-data/

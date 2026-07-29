@@ -1,0 +1,101 @@
+site_name: AI All-in-One
+site_description: 统一大模型入口的设计文档（chat / music / video / image 可扩展）
+site_url: https://growdu.github.io/ai_all_in_one/
+repo_url: https://github.com/growdu/ai_all_in_one
+repo_name: growdu/ai_all_in_one
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: 切换到暗色
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到亮色
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.details
+  - pymdownx.keys
+  - pymdownx.tilde
+  - pymdownx.caret
+  - pymdownx.smartsymbols
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search:
+      lang: zh
+  - git-revision-date-localized:
+      enabled: true
+      type: date
+      fallback_to_build_date: true
+
+nav:
+  - 首页: index.md
+  - 架构:
+      - 顶层架构: architecture/00-overview.md
+      - 统一协议: api/01-protocol.md
+  - 设计:
+      - 后端 Provider 抽象: backend/02-provider.md
+      - 前端 Web: frontend/03-web.md
+  - 路线:
+      - 扩展性: roadmap/04-extensibility.md
+      - 1.0 任务拆分: roadmap/05-mvp-tasks.md
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/growdu/ai_all_in_one
