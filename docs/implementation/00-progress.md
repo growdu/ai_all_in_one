@@ -8,7 +8,7 @@
 | Phase | 内容 | 状态 | 验证 |
 |-------|------|------|------|
 | 0 | 项目脚手架（Gin / health / 配置 / Docker） | ✅ 完成 | build/vet/test 全过，/health 200，/metrics 返回 Prometheus 文本 |
-| 1 | 核心抽象（Modality / Provider / Registry） | 待办 | — |
+| 1 | 核心抽象（Modality / Provider / Registry） | ✅ 完成 | 12 tests 通过（Modality 2 / ModelInfo 4 / Registry 4 / 其他 2） |
 | 2 | Master chat 端到端（single 模式流式） | 待办 | — |
 | 2.5 | Routing 进阶（auto / compare） | 待办 | — |
 | 3 | Worker role（豆包/DeepSeek/Kimi Provider） | 待办 | — |
@@ -31,6 +31,13 @@ backend/
 │   ├── observability/                      # 日志/metrics/health
 │   │   ├── observability.go                # 占位 Prometheus 输出
 │   │   └── observability_test.go           # 5 tests
+│   ├── core/                               # Phase 1: 跨角色共享抽象
+│   │   ├── capability.go                   # Modality 枚举
+│   │   ├── capability_test.go              # 2 tests
+│   │   ├── models.go                       # ModelInfo / ChatRequest / ChatChunk / ErrorResponse
+│   │   ├── models_test.go                  # 4 tests
+│   │   ├── registry.go                     # ChatProvider interface + Registry
+│   │   └── registry_test.go                # 4 tests
 │   └── role/                               # Master/Worker 启动
 │       └── role.go
 ```
@@ -66,5 +73,6 @@ go test ./...
 
 | 日期 | Commit | Phase | 摘要 |
 |------|--------|-------|------|
-| 2026-07-29 | (pending) | 0 | 项目脚手架：config / observability / role / health/metrics 端点 |
+| 2026-07-29 | 9888955 | 0 | 项目脚手架：config / observability / role / health/metrics 端点 |
+| 2026-07-29 | (pending) | 1 | 核心抽象：Modality / 统一数据模型 / ChatProvider interface / Registry |
 
