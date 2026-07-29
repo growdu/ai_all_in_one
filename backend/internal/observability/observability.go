@@ -117,7 +117,7 @@ func MetricsHandler() http.HandlerFunc {
 
 // ---- Request Logger ----
 
-// LoggingMiddleware 简单请求日志中间件（slog JSON）
+// LogRequest 简单请求日志中间件（slog JSON）
 // 1.0 用 stdlib log/slog，2.0 切到 zap/zerolog 不变接口
 type Logger interface {
 	Info(msg string, args ...any)
@@ -126,6 +126,7 @@ type Logger interface {
 func LogRequest(logger Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		// statusRecorder 实现 http.Flusher 以保持 SSE 流式能力
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
 		logger.Info("http request",
@@ -141,9 +142,20 @@ func LogRequest(logger Logger, next http.Handler) http.Handler {
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
+	wrote  bool
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
+	if !r.wrote {
+		r.status = code
+		r.ResponseWriter.WriteHeader(code)
+		r.wrote = true
+	}
+}
+
+// Flush 透传 http.Flusher，保留 SSE 流式能力
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }

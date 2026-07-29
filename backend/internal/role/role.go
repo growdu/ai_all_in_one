@@ -14,13 +14,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/growdu/ai_all_in_one/backend/internal/api"
 	"github.com/growdu/ai_all_in_one/backend/internal/config"
+	"github.com/growdu/ai_all_in_one/backend/internal/core"
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
+	"github.com/growdu/ai_all_in_one/backend/internal/providers/mockprovider"
 )
 
 // RunMaster 启动 Master 进程。
 //
-// 1.0 阶段：stdlib mux + /health + /metrics + 占位 API 路由。
+// 1.0 阶段：stdlib mux + /health + /metrics + 真实 chat/models 路由。
 // 详细见 docs/backend/02-provider.md §四。
 func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.Storage.SQLitePath), 0o755); err != nil {
@@ -31,13 +34,19 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 		return err == nil || os.IsNotExist(err)
 	}
 
+	// 初始化 Provider Registry（1.0 阶段只有 mock）
+	reg := core.NewRegistry()
+	reg.RegisterChat(mockprovider.New())
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", observability.HealthHandler(dbOK))
 	mux.HandleFunc("/metrics", observability.MetricsHandler())
-
-	// 1.0 占位路由，Phase 2 起逐步替换
-	mux.HandleFunc("/api/v1/models", notImplemented("Phase 2"))
-	mux.HandleFunc("/api/v1/chat/completions", notImplemented("Phase 2"))
+	mux.Handle("/api/v1/models", &api.ModelsHandler{Registry: reg})
+	mux.Handle("/api/v1/chat/completions", &api.ChatHandler{
+		Logger:    logger,
+		Registry:  reg,
+		AuthToken: os.Getenv("AIIO_AUTH_TOKEN"),
+	})
 
 	handler := observability.LogRequest(logger, mux)
 
@@ -45,6 +54,7 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 		slog.String("addr", cfg.Server.Listen),
 		slog.String("storage", cfg.Storage.SQLitePath),
 		slog.Int("workers_configured", len(cfg.Workers)),
+		slog.Int("providers", len(reg.ChatProviders())),
 	)
 
 	return startHTTPServer(context.Background(), cfg.Server.Listen, handler, logger)

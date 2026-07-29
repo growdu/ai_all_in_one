@@ -9,7 +9,7 @@
 |-------|------|------|------|
 | 0 | 项目脚手架（Gin / health / 配置 / Docker） | ✅ 完成 | build/vet/test 全过，/health 200，/metrics 返回 Prometheus 文本 |
 | 1 | 核心抽象（Modality / Provider / Registry） | ✅ 完成 | 12 tests 通过（Modality 2 / ModelInfo 4 / Registry 4 / 其他 2） |
-| 2 | Master chat 端到端（single 模式流式） | 待办 | — |
+| 2 | Master chat 端到端（single 模式流式） | ✅ 完成 | mock provider + 真实 http server，7 tests + 端到端 stream 验证通过 |
 | 2.5 | Routing 进阶（auto / compare） | 待办 | — |
 | 3 | Worker role（豆包/DeepSeek/Kimi Provider） | 待办 | — |
 | 4 | Key 管理（SQLite + AES-GCM） | 待办 | — |
@@ -29,7 +29,7 @@ backend/
 │   │   ├── config.go
 │   │   └── config_test.go                  # 3 tests
 │   ├── observability/                      # 日志/metrics/health
-│   │   ├── observability.go                # 占位 Prometheus 输出
+│   │   ├── observability.go                # 占位 Prometheus 输出 + 状态记录器
 │   │   └── observability_test.go           # 5 tests
 │   ├── core/                               # Phase 1: 跨角色共享抽象
 │   │   ├── capability.go                   # Modality 枚举
@@ -38,6 +38,15 @@ backend/
 │   │   ├── models_test.go                  # 4 tests
 │   │   ├── registry.go                     # ChatProvider interface + Registry
 │   │   └── registry_test.go                # 4 tests
+│   ├── api/                                # Phase 2: HTTP handlers
+│   │   ├── chat.go                         # /api/v1/chat/completions
+│   │   ├── chat_test.go                    # 7 tests
+│   │   ├── models.go                       # /api/v1/models
+│   │   └── models_test.go                  # 2 tests
+│   ├── providers/                          # Phase 2: mock provider
+│   │   └── mockprovider/                   # 不依赖外部 API 的回显 provider
+│   │       ├── mock.go
+│   │       └── mock_test.go                # 5 tests
 │   └── role/                               # Master/Worker 启动
 │       └── role.go
 ```
@@ -48,6 +57,39 @@ backend/
 - **占位 Prometheus**：1.0 阶段不引入 prometheus client_golang，用简单文本格式暴露指标。Phase 2 升级
 - **SQLite 未接**：1.0 阶段 `/health` 的 db_ok 只检查文件路径，2.0 接 modernc.org/sqlite 后改用 `PRAGMA quick_check`
 - **Phase 0 改回 master_key_env 宽松校验**：1.0 简单部署场景不该强求 master key env，调用 `MasterKey()` 时再报错
+
+## 端到端验证（Phase 2 验证脚本）
+
+```bash
+# 启动 master
+AIIO_JWT_SECRET=t \
+  AIIO_ROLE=master \
+  AIIO_CONFIG=/tmp/master-test.yaml \
+  AIIO_AUTH_TOKEN=devtoken \
+  /tmp/aiio > /tmp/aiio.log 2>&1 &
+
+# 1. 列模型
+curl -s http://localhost:18080/api/v1/models
+# → {"models":[{"id":"mock-echo",...}]}
+
+# 2. 非流式 chat
+curl -s -X POST http://localhost:18080/api/v1/chat/completions \
+  -H "Authorization: Bearer devtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"mock-echo","messages":[{"role":"user","content":"hi"}]}'
+# → {"id":"chatcmpl-mock-...","content":"echo: hi","usage":{...}}
+
+# 3. 流式 SSE
+curl -s -N -X POST http://localhost:18080/api/v1/chat/completions \
+  -H "Authorization: Bearer devtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"mock-echo","messages":[{"role":"user","content":"hi"}],"stream":true}'
+# → data: {"id":"...","delta":"e","chunk_index":0}\n\n  ...
+# → data: {"id":"...","delta":"i","chunk_index":7,"finish_reason":"stop"}\n\n
+# → data: [DONE]\n\n
+```
+
+**关键发现**：`observability.LogRequest` 中间件的 `statusRecorder` 必须实现 `http.Flusher`，否则 SSE 流式失效。已在 Phase 2 修复。
 
 ## 实施规则
 
@@ -74,5 +116,6 @@ go test ./...
 | 日期 | Commit | Phase | 摘要 |
 |------|--------|-------|------|
 | 2026-07-29 | 9888955 | 0 | 项目脚手架：config / observability / role / health/metrics 端点 |
-| 2026-07-29 | (pending) | 1 | 核心抽象：Modality / 统一数据模型 / ChatProvider interface / Registry |
+| 2026-07-29 | c567951 | 1 | 核心抽象：Modality / 统一数据模型 / ChatProvider interface / Registry |
+| 2026-07-29 | (pending) | 2 | Master chat 端到端：chat handler + models handler + mock provider + SSE 流式透传 |
 
