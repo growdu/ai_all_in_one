@@ -335,7 +335,65 @@ data: [DONE]
 
 **1.0 落地**：协议层完整定义，路由 501 占位返回。Phase X 实施时实现 Job 调度器（goroutine pool + 状态机 + SQLite 持久化）。
 
-### 1.5 预留接口（1.0 不实现，2.0 启用）
+### 1.5 历史会话
+
+> 解决 review 1.4："刷新/换设备就丢对话"。1.0 最小化：后端存文本，前端重新加载；文件/图片引用靠重新上传。
+
+**端点**：
+
+```
+GET    /api/v1/conversations              列表（按 updated_at 倒序，分页）
+POST   /api/v1/conversations              新建
+GET    /api/v1/conversations/{id}         查详情（消息流）
+PATCH  /api/v1/conversations/{id}         改标题 / 置顶
+DELETE /api/v1/conversations/{id}         删除（级联删消息）
+```
+
+**Conversation 对象**：
+
+```json
+{
+  "id": "conv_xxx",
+  "title": "Go interface 学习",
+  "created_at": "2026-07-29T10:00:00Z",
+  "updated_at": "2026-07-29T10:30:00Z",
+  "model": "doubao-1-5-pro-32k",
+  "mode": "single",
+  "message_count": 8,
+  "pinned": false
+}
+```
+
+**Message 对象**（详情时返回）：
+
+```json
+{
+  "id": "msg_xxx",
+  "role": "user",
+  "content": "Go interface 是什么？",
+  "attachment_file_ids": ["file_xxx"],
+  "created_at": "2026-07-29T10:00:00Z"
+}
+```
+
+**存储策略**：
+- **文本消息** 全部存后端 SQLite（带 FTS 索引 for 2.0 搜索）
+- **文件引用** 只存 file_id 列表，刷新后渲染占位符，**用户需重新上传才能让 AI 看到**
+- **system prompt** 存会话级（每会话独立，不全局共享）
+
+**1.0 不做**：
+- 全文搜索（2.0 加 FTS5 索引）
+- 分享 / 协作
+- 标签 / 分类
+- 导出（Markdown / JSON）
+- 自动删除策略（永久保留，用户主动删）
+
+**为什么 1.0 就做**：
+- 用户最基本诉求"找回上周对话"
+- 后端投入 ≈ 1 人天（2 张表 + 5 个路由）
+- 比 2.0 临时加便宜 10x（届时涉及数据迁移）
+
+### 1.6 预留接口（1.0 不实现，2.0 启用）
 
 | 接口 | 用途 | 触发场景 |
 |------|------|---------|

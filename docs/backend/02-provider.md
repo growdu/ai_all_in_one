@@ -553,6 +553,93 @@ GET /health
 - Prometheus 指标 + 日志够定位 80% 问题
 - 2.0 引入 OTel 的成本 ≈ 0.5 人天，但收益要在多 Master 横向扩展后才显现
 
+## 九点七、历史会话 schema（review 1.4）
+
+> 解决 review 1.4：1.0 最小可用版历史持久化。
+
+### 9.7.1 数据库表
+
+```sql
+-- 会话表
+CREATE TABLE conversation (
+  id           TEXT PRIMARY KEY,        -- conv_xxx
+  owner_id     TEXT NOT NULL,           -- user_xxx
+  title        TEXT NOT NULL DEFAULT '新对话',
+  model        TEXT NOT NULL,           -- 用的 model id
+  mode         TEXT NOT NULL DEFAULT 'single',  -- single/auto/compare
+  system_prompt TEXT,                   -- 会话级 system prompt（可空）
+  pinned       INTEGER NOT NULL DEFAULT 0,
+  created_at   TIMESTAMP NOT NULL,
+  updated_at   TIMESTAMP NOT NULL,
+  FOREIGN KEY (owner_id) REFERENCES user(id)
+);
+CREATE INDEX idx_conv_owner_updated ON conversation(owner_id, updated_at DESC);
+
+-- 消息表
+CREATE TABLE message (
+  id              TEXT PRIMARY KEY,    -- msg_xxx
+  conversation_id TEXT NOT NULL,
+  role            TEXT NOT NULL,       -- user/assistant/system/tool
+  content         TEXT NOT NULL,
+  attachments     TEXT NOT NULL DEFAULT '[]',  -- JSON array of file_id
+  model           TEXT,                -- 仅 assistant 有
+  latency_ms      INTEGER,             -- 仅 assistant 有
+  created_at      TIMESTAMP NOT NULL,
+  FOREIGN KEY (conversation_id) REFERENCES conversation(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_msg_conv ON message(conversation_id, created_at);
+```
+
+### 9.7.2 仓储接口
+
+```go
+// internal/db/conv_repo.go
+type ConvRepo struct { db *sql.DB }
+
+func (r *ConvRepo) Create(ctx context.Context, ownerID string, model string) (*Conversation, error)
+func (r *ConvRepo) List(ctx context.Context, ownerID string, limit int, offset int) ([]*Conversation, error)
+func (r *ConvRepo) Get(ctx context.Context, id string, ownerID string) (*Conversation, error)
+func (r *ConvRepo) UpdateTitle(ctx context.Context, id string, ownerID string, title string) error
+func (r *ConvRepo) Pin(ctx context.Context, id string, ownerID string, pinned bool) error
+func (r *ConvRepo) Delete(ctx context.Context, id string, ownerID string) error  // 级联删消息
+```
+
+```go
+// internal/db/msg_repo.go
+type MsgRepo struct { db *sql.DB }
+
+func (r *MsgRepo) Append(ctx context.Context, convID string, msg *Message) error
+func (r *MsgRepo) ListByConv(ctx context.Context, convID string, ownerID string) ([]*Message, error)
+```
+
+### 9.7.3 路由
+
+见 [统一协议 §1.5 历史会话](../api/01-protocol.md#15)。5 个端点对应 5 个 service 方法。
+
+### 9.7.4 权限
+
+所有查询都带 `WHERE owner_id = ?`，**强制隔离**。SQL 层防御，不依赖业务层。
+
+### 9.7.5 写入时机
+
+- 用户发消息 → `convRepo` 更新 `updated_at`，`msgRepo.Append(user)`
+- AI 响应完成 → `msgRepo.Append(assistant)`，`convRepo` 更新 `updated_at`
+- 流式场景：assistant 消息先建空 record（status=streaming），流结束后 PATCH content
+
+### 9.7.6 为什么 1.0 不做全文搜索
+
+- 1.0 用户量小，列表翻页够用
+- FTS5 索引 2.0 加，几行 SQL
+- 提前加会让 1.0 写入路径复杂 20%
+
+### 9.7.7 实施时间
+
+- 2 张表 + 迁移：0.2 d
+- 5 个仓储方法：0.3 d
+- 5 个路由 + service：0.3 d
+- 前端 History 页面：0.2 d
+- **合计 ≈ 1 d**（review 计划口径）
+
 ## 七、为什么这套设计能撑住扩展
 
 | 未来需求 | 扩展点 | 影响面 |
