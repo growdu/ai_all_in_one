@@ -13,6 +13,7 @@
 
 - [顶层架构](architecture/00-overview.md) — Modality / Capability / Provider 三层抽象
 - [路由策略](architecture/01-routing-strategy.md) — single / auto / compare 三种聊天模式与筛选算法
+- [输入处理](architecture/02-input-processing.md) — 附件预处理 + Prompt 增强（可关可看）
 - [统一协议](api/01-protocol.md) — OpenAI Chat Completions 兼容契约
 - [后端 Provider 抽象](backend/02-provider.md) — Go + Master/Worker 双角色设计
 - [前端 Web 设计](frontend/03-web.md) — Vue3 + 移动端 H5 适配
