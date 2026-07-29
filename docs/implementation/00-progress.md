@@ -12,7 +12,7 @@
 | 2 | Master chat 端到端（single 模式流式） | ✅ 完成 | mock provider + 真实 http server，7 tests + 端到端 stream 验证通过 |
 | 2.5 | Routing 进阶（auto / compare） | ✅ 完成 | 9 routing tests + 端到端 auto/compare 验证通过 |
 | 3 | Worker role（豆包/DeepSeek/Kimi Provider） | 待办 | — |
-| 4 | Key 管理（SQLite + AES-GCM） | 待办 | — |
+| 4 | Key 管理（SQLite + AES-GCM） | ✅ 完成（JSON 文件 + AES-GCM；SQLite 留 2.0） | 14 security tests + 6 keys handler tests + 端到端 PUT/GET/DELETE + 文件 0600 验证 |
 | 5 | 前端 MVP（Vue3 + SSE + 5 页） | 待办 | — |
 | 6 | 文件上传 + 多模态 | 待办 | — |
 | 7 | 移动端打磨 | 待办 | — |
@@ -54,6 +54,12 @@ backend/
 │   │   ├── scoring_test.go                 # 5 tests
 │   │   ├── router.go                       # single/auto/compare 三模式
 │   │   └── router_test.go                  # 4 tests
+│   ├── security/                           # Phase 4: AES-GCM + Keyring
+│   │   ├── aesgcm.go                       # AES-256-GCM 加密
+│   │   ├── aesgcm_test.go                  # 5 tests
+│   │   ├── keyring.go                      # Keyring JSON 文件实现
+│   │   ├── keyring_test.go                 # 9 tests
+│   │   └── codec.go                        # base64 + 时间
 │   └── role/                               # Master/Worker 启动
 │       └── role.go
 ```
@@ -124,6 +130,43 @@ curl -X POST http://localhost:18080/api/v1/chat/completions \
 - auto 失败 fallback 1 次（max_auto_fallback=1）
 - compare 模式 1.0 不支持 stream（流式变体留 2.0）
 
+## 端到端验证（Phase 4 Key 管理）
+
+```bash
+# 启动（设 AIIO_MASTER_KEY=32字节）
+AIIO_MASTER_KEY=0123456789abcdef0123456789abcdef /tmp/aiio &
+
+# PUT
+curl -X POST http://localhost:18080/api/v1/keys \
+  -H "Authorization: Bearer devtoken" \
+  -d '{"provider":"doubao","key":"sk-test-SECRET-VALUE"}'
+# → {"provider":"doubao","updated_at":1785321843}
+
+# GET（不返回明文！）
+curl http://localhost:18080/api/v1/keys -H "Authorization: Bearer devtoken"
+# → {"providers":["doubao"]}
+
+# DELETE
+curl -X DELETE http://localhost:18080/api/v1/keys/doubao -H "Authorization: Bearer devtoken"
+# → 204 No Content
+
+# 磁盘上的 keyring.json
+# {"version":1,"entries":{"doubao":{"provider":"doubao",
+#   "ciphertext":"XUn7fwg...","updated_at":1785321843}}}
+# 0600 权限，密文形式存储
+```
+
+**安全要点**：
+- AES-256-GCM（12B nonce + ciphertext + 16B tag）
+- Master key 必须 32 字节（从 env AIIO_MASTER_KEY）
+- keyring.json 文件 0600
+- GET 不返回明文 Key（只列 provider 名字）
+- Decrypt 失败（错 key）返回 error，不 panic
+
+**Phase 4 决策**：
+- **JSON 文件而非 SQLite**：1.0 用户量小 + 零 CGO 部署门槛。SQLite 留 2.0（`modernc.org/sqlite` 纯 Go 驱动）
+- **Keyring 不接 chat 路由**：1.0 阶段 keyring 暴露为 API（CRUD），chat handler 仍用 PLACEHOLDER_USER_KEY。Phase 5 接入真 Key → Provider 的链路
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -151,5 +194,6 @@ go test ./...
 | 2026-07-29 | 9888955 | 0 | 项目脚手架：config / observability / role / health/metrics 端点 |
 | 2026-07-29 | c567951 | 1 | 核心抽象：Modality / 统一数据模型 / ChatProvider interface / Registry |
 | 2026-07-29 | be2a8e1 | 2 | Master chat 端到端：chat handler + models handler + mock provider + SSE 流式透传 |
-| 2026-07-29 | (pending) | 2.5 | Routing：4 因子打分 + 滑动窗口 + single/auto/compare 三模式 |
+| 2026-07-29 | 171b7eb | 2.5 | Routing：4 因子打分 + 滑动窗口 + single/auto/compare 三模式 |
+| 2026-07-29 | (pending) | 4 | Key 管理：AES-256-GCM 加密 + JSON 文件 Keyring + CRUD API |
 

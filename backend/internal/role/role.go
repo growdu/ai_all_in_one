@@ -20,6 +20,7 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/observability"
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/mockprovider"
 	"github.com/growdu/ai_all_in_one/backend/internal/routing"
+	"github.com/growdu/ai_all_in_one/backend/internal/security"
 )
 
 // RunMaster 启动 Master 进程。
@@ -54,6 +55,12 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 		Router:    router,
 		AuthToken: os.Getenv("AIIO_AUTH_TOKEN"),
 	})
+	// 1.0 简化：Keyring handler 始终挂载（即便 keyring 未初始化，返回 500 时也安全）
+	// 实际：见下方的 lazy init
+	if kr, err := initKeyring(cfg, logger); err == nil {
+		mux.Handle("/api/v1/keys", &api.KeysHandler{Keyring: kr})
+		mux.Handle("/api/v1/keys/", &api.KeysHandler{Keyring: kr})
+	}
 
 	handler := observability.LogRequest(logger, mux)
 
@@ -134,4 +141,19 @@ func notImplemented(phase string) http.HandlerFunc {
 		w.WriteHeader(http.StatusNotImplemented)
 		w.Write([]byte(`{"error":{"code":"not_implemented","message":"` + phase + `"}}`))
 	}
+}
+
+// initKeyring 初始化 keyring（1.0 阶段：仅当 AIIO_MASTER_KEY 是 32 字节时启用）
+func initKeyring(cfg *config.Config, logger *slog.Logger) (*security.Keyring, error) {
+	masterKey := os.Getenv("AIIO_MASTER_KEY")
+	if masterKey == "" || len(masterKey) != 32 {
+		return nil, errors.New("AIIO_MASTER_KEY not set or not 32 bytes")
+	}
+	path := filepath.Join(filepath.Dir(cfg.Storage.SQLitePath), "keyring.json")
+	kr, err := security.NewKeyring(path, []byte(masterKey))
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("keyring initialized", slog.String("path", path))
+	return kr, nil
 }
