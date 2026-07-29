@@ -44,6 +44,69 @@ GET /api/v1/models
 - 后端新增 Provider 后前端自动可见
 - 价格、上下文窗口等元数据从 Provider 配置读出，未来可改
 
+### 1.1.1 能力字段定义
+
+`capabilities` 是字符串数组，每个值取自下方枚举。后端在 `routing` 层做 `capability_match` 判分时按枚举比对，不接受未在枚举内的值。
+
+**基础能力（`capabilities[]` 元素）**：
+
+| 值 | 含义 | 适用模态 |
+|----|------|---------|
+| `text` | 基础文本生成 | chat / music (歌词) / image (caption) |
+| `stream` | 支持流式 SSE 输出 | chat / image (partial preview) |
+| `vision` | 图像理解（输入图） | chat |
+| `file` | 文档解析（输入文件） | chat |
+| `tools` | function calling | chat |
+| `json_mode` | JSON 结构化输出 | chat |
+| `reasoning` | 推理增强（o1 类深度思考） | chat |
+
+**复杂能力（Model 对象下的子字段，**不**放在 `capabilities` 数组里）**：
+
+```yaml
+# function calling 详细配置
+model.tools:
+  parallel_calls: bool       # 是否支持并行多 tool
+  max_steps: int             # 单轮最多 tool 调用次数
+
+# 推理增强详细配置
+model.reasoning:
+  effort: low | medium | high   # 推理力度
+
+# 图像生成详细配置（2.0+）
+model.image:
+  sizes: ["1024x1024", "1024x1792"]
+  quality: ["standard", "hd"]
+  edit: bool                  # 是否支持 inpaint / outpaint
+```
+
+**示例**（o1 类模型）：
+
+```json
+{
+  "id": "o1-preview",
+  "display_name": "OpenAI o1 Preview",
+  "provider": "openai",
+  "modality": "chat",
+  "capabilities": ["text", "stream", "reasoning"],
+  "reasoning": { "effort": "high" },
+  "context_window": 128000
+}
+```
+
+**示例**（支持并行 tools）：
+
+```json
+{
+  "id": "gpt-4o",
+  "display_name": "GPT-4o",
+  "provider": "openai",
+  "modality": "chat",
+  "capabilities": ["text", "stream", "vision", "file", "tools"],
+  "tools": { "parallel_calls": true, "max_steps": 10 },
+  "context_window": 128000
+}
+```
+
 ### 1.2 Chat 对话（OpenAI 兼容）
 
 ```
