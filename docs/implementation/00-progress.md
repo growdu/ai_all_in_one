@@ -15,7 +15,7 @@
 | 4 | Key 管理（SQLite + AES-GCM） | ✅ 完成（JSON 文件 + AES-GCM；SQLite 留 2.0） | 14 security tests + 6 keys handler tests + 端到端 PUT/GET/DELETE + 文件 0600 验证 |
 | 4.5 | Keyring ↔ chat 路由集成 | ✅ 完成 | 4 chat keyring tests + 端到端 4 场景（无 key 400 / 有 key 200 / auto 部分无 key fallback） |
 | 5 | 前端 MVP（HTML+JS 5 页） | ✅ 完成（1.0 极简版，5 HTML + 5 JS + 1 CSS） | 静态文件服务 + API 共存，端到端 GET 4 页 + 3 资源 + /api/v1/models 全 200 |
-| 6 | 文件上传 + 多模态 | 待办 | — |
+| 6 | 文件上传 + 多模态 | ✅ 完成（本地文件系统 + 截断） | 10 storage tests + 8 file handler tests + 端到端 upload/list/reject |
 | 7 | 移动端打磨 | 待办 | — |
 | 8 | 部署与文档 | ✅ 完成 | Dockerfile 写好、docker-compose.yml 通过 `docker compose config` 校验、deploy.md + user-guide.md + .env.example 完整 |
 
@@ -64,7 +64,9 @@ backend/
 │   │   └── kimi/                           # Kimi（Moonshot）
 │   │       ├── kimi.go
 │   │       └── kimi_test.go                # 2 tests
-│   ├── static/                             # Phase 5: 极简前端（5 页）
+│   ├── storage/                            # Phase 6: 文件存储
+│   │   ├── file.go                         # 本地文件系统 + 截断
+│   │   └── file_test.go                    # 10 tests
 │   │   ├── onboarding.html / .js           # 4 步引导
 │   │   ├── home.html / .js                 # Chat 主页面 + SSE 流式
 │   │   ├── settings.html / .js             # API Key + AI 角色 + 高级参数
@@ -379,6 +381,60 @@ $ curl /metrics          # → aiio_chat_total 0
 - 2.0 阶段：可拆出 worker-cn / worker-us 到不同 VPS
 - 完整版 compose（含 worker）保留为参考
 
+## 端到端验证（Phase 6 文件上传）
+
+```bash
+# 上传图片
+curl -X POST http://localhost:18080/api/v1/files \
+  -H "Authorization: Bearer devtoken" \
+  -F "file=@test.png;type=image/png"
+# → 201 {
+#     "id":"file_203eb767ec94de7c979cec9d",
+#     "owner_user_id":"default",
+#     "filename":"test-upload.png",
+#     "mime_type":"image/png",
+#     "size":14,"processed_size":14,
+#     "truncated":false,
+#     "source":"user_upload",
+#     "created_at":"..."
+#   }
+
+# 列出
+curl http://localhost:18080/api/v1/files -H "Authorization: Bearer devtoken"
+# → {"files":[...]}
+
+# 拒绝不支持的 mime
+curl -X POST .../files -F "file=@virus.exe;type=application/x-msdownload"
+# → 400 {"error":{"code":"file_unsupported",...}}
+
+# 磁盘结构
+ls /data/files/                  # → file_xxx.bin 0600
+cat /data/file_index.json         # → _files 索引
+```
+
+**核心实现**：
+- **本地文件系统**：`data/files/{id}.bin` + `data/file_index.json`
+- **大小限制**：图片 5MB / 文档 50KB
+- **截断策略**：超限 → 头 30K + 中间省略 + 尾 20K
+- **mime 校验**：`image/*` / `text/*` / `application/pdf` / `application/json`
+- **owner 隔离**：1.0 单用户（"default"），2.0 接 JWT 后用真实 user_id
+- **拒绝 office/二进制**（1.0 简化，不引入 PDF 抽文本库）
+
+**测试统计**：
+- 累计 96 tests passed（+18）
+  - 之前 78
+  - storage 10 + api 8 = 18 新增
+
+**Phase 6 决策**：
+- 1.0 不做 PDF 抽文本 / 图片压缩（仅截断）
+- 1.0 不做文件级权限（所有上传归 "default"）
+- 2.0 升级：图片压缩、PDF 抽文本、多用户隔离、Office 支持
+
+**已知 1.0 限制**（待 Phase 1.1）：
+- chat 不读 attachments：文件存了但 chat handler 没把 file_id 注入 messages
+- 1.0 阶段：文件存储 + 列表 + 删除可工作，chat 端集成留 1.1
+- Phase 1.1 计划：chat.go 加 file_id → file content 注入 + 截断 + 重新组装 messages
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -411,5 +467,6 @@ go test ./...
 | 2026-07-29 | d64c589 | 4.5 | Keyring ↔ chat 集成：userKeyFor + router 接受 keyFor 回调 |
 | 2026-07-29 | fea0b47 | 3 | Worker + 豆包/DeepSeek/Kimi OpenAI 兼容 Provider |
 | 2026-07-29 | 651db93 | 5 | 前端 MVP：4 HTML + 5 JS + 1 CSS，零构建工具，i18n zh/en |
-| 2026-07-29 | (pending) | 8 | 部署：Dockerfile + docker-compose.yml + .env.example + deploy.md + user-guide.md |
+| 2026-07-29 | fb086c7 | 8 | 部署：Dockerfile + docker-compose.yml + .env.example + deploy.md + user-guide.md |
+| 2026-07-29 | (pending) | 6 | 文件上传：本地文件系统 + 截断 + mime 校验 + 端到端 upload/list/reject |
 

@@ -24,6 +24,7 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/mockprovider"
 	"github.com/growdu/ai_all_in_one/backend/internal/routing"
 	"github.com/growdu/ai_all_in_one/backend/internal/security"
+	"github.com/growdu/ai_all_in_one/backend/internal/storage"
 )
 
 // RunMaster 启动 Master 进程。
@@ -66,6 +67,16 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	} else {
 		logger.Warn("keyring disabled", slog.String("err", err.Error()))
 	}
+
+	// File store：本地文件系统（data_dir/files/ + file_index.json）
+	// 1.0 单用户：所有上传都归 "default" user
+	fileStore := storage.NewFileStore(
+		filepath.Join(filepath.Dir(cfg.Storage.SQLitePath), "files"),
+		filepath.Join(filepath.Dir(cfg.Storage.SQLitePath), "file_index.json"),
+		[]byte("not-used-in-1.0"),
+	)
+	mux.Handle("/api/v1/files", &api.FilesHandler{Store: fileStore, DefaultUser: "default"})
+	mux.Handle("/api/v1/files/", &api.FileItemHandler{Store: fileStore, DefaultUser: "default"})
 
 	mux.Handle("/api/v1/chat/completions", &api.ChatHandler{
 		Logger:    logger,
