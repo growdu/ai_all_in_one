@@ -562,6 +562,70 @@ export default {
 - 设置中语言选择持久化（localStorage）
 - 找不到的 key 降级用 fallbackLocale（en）
 
+## 九、快捷键（review 3.8）
+
+> 解决"重度用户用着累"。
+
+1.0 实现 5 个高频快捷键：
+
+| 快捷键 | 动作 | 场景 | i18n key |
+|--------|------|------|----------|
+| `Ctrl/Cmd + Enter` | 发送消息 | 输入框聚焦时 | `shortcuts.send` |
+| `Ctrl/Cmd + L` | 清空当前对话 | 全局 | `shortcuts.clear` |
+| `Ctrl/Cmd + N` | 新建对话 | 全局 | `shortcuts.new` |
+| `Esc` | 停止生成 | 流式进行中 | `shortcuts.stop` |
+| `Ctrl/Cmd + /` | 切换模式（single/auto/compare） | 全局 | `shortcuts.toggleMode` |
+
+**实现**：`src/composables/useShortcuts.ts`
+
+```typescript
+import { onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+export function useShortcuts() {
+  const { t } = useI18n()
+  
+  const handler = (e: KeyboardEvent) => {
+    const meta = e.ctrlKey || e.metaKey
+    if (meta && e.key === 'Enter') { /* 发送 */ }
+    else if (meta && e.key === 'l') { /* 清空 */ }
+    else if (meta && e.key === 'n') { /* 新建 */ }
+    else if (e.key === 'Escape') { /* 停止 */ }
+    else if (meta && e.key === '/') { /* 切模式 */ }
+  }
+  
+  onMounted(() => window.addEventListener('keydown', handler))
+  onUnmounted(() => window.removeEventListener('keydown', handler))
+}
+```
+
+**平台差异**：
+- macOS 用 `Cmd`，Windows/Linux 用 `Ctrl`，自动检测
+- 移动端无快捷键（系统限制）
+- 桌面浏览器优先
+
+**Settings 展示**：
+
+```
+快捷键
+  Ctrl+Enter  发送
+  Ctrl+L      清空对话
+  Ctrl+N      新建对话
+  Esc         停止生成
+  Ctrl+/      切换模式
+```
+
+**1.0 不做**：
+- 自定义快捷键绑定（YAGNI）
+- Cheatsheet 弹层（隐藏功能，先 2.0 加 ? 唤出）
+
+**i18n 接入**：所有 label 走 t()，中英两套见 §八 i18n 框架。
+
+**为什么 1.0 就加**：
+- 5 个键的代码量 < 30 行
+- 重度用户判断产品专业度的关键指标
+- 不影响默认用户（无键 = 不触发）
+
 ## 七、移动端 H5 适配
 
 - viewport meta：`width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no`
