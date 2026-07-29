@@ -96,6 +96,9 @@ nav:
       - 扩展性: roadmap/04-extensibility.md
       - 1.0 任务拆分: roadmap/05-mvp-tasks.md
       - 实现进度: implementation/00-progress.md
+  - 运维:
+      - 部署指南: deploy.md
+      - 用户手册: user-guide.md
 
 extra:
   generator: false

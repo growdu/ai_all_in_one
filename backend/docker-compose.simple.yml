@@ -1,0 +1,25 @@
+version: "3.9"
+
+# 极简版：单容器，1.0 demo 用
+# 配置文件和 env 走环境变量注入，data 走 volume
+
+services:
+  aiio:
+    build: .
+    image: aiio:latest
+    container_name: aiio
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      AIIO_ROLE: master
+      AIIO_CONFIG: /configs/master.yaml
+      AIIO_MASTER_KEY: "${AIIO_MASTER_KEY}"
+      AIIO_JWT_SECRET: "${AIIO_JWT_SECRET}"
+      AIIO_AUTH_TOKEN: "${AIIO_AUTH_TOKEN:-devtoken}"
+    volumes:
+      - ./configs:/configs:ro
+      - aiio-data:/data
+
+volumes:
+  aiio-data:

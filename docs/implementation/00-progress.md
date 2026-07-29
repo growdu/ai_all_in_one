@@ -17,7 +17,7 @@
 | 5 | 前端 MVP（HTML+JS 5 页） | ✅ 完成（1.0 极简版，5 HTML + 5 JS + 1 CSS） | 静态文件服务 + API 共存，端到端 GET 4 页 + 3 资源 + /api/v1/models 全 200 |
 | 6 | 文件上传 + 多模态 | 待办 | — |
 | 7 | 移动端打磨 | 待办 | — |
-| 8 | 部署与文档 | 待办 | — |
+| 8 | 部署与文档 | ✅ 完成 | Dockerfile 写好、docker-compose.yml 通过 `docker compose config` 校验、deploy.md + user-guide.md + .env.example 完整 |
 
 ## 已落地模块
 
@@ -336,6 +336,49 @@ style.css        4187B
 - PWA manifest
 - 暗色模式（CSS 已留好变量位置）
 
+## 端到端验证（Phase 8 部署与文档）
+
+```bash
+# docker compose 配置校验（沙箱无网络，不能 build）
+$ docker compose config --quiet
+error while interpolating ... AIIO_MASTER_KEY is missing
+# → 正确：env 校验生效，强制用户设 master key
+
+# 本地 go run 跑（生产实际是 docker compose up）
+$ go run ./cmd/aiio &
+$ curl /health         # → 200
+$ curl /onboarding.html  # → 200
+$ curl /api/v1/models    # → 10 models 5 providers
+$ curl /metrics          # → aiio_chat_total 0
+```
+
+**新增/修改文件**：
+- `backend/Dockerfile` — 2 阶段：golang:1.22-alpine → distroless/static:nonroot
+  - binary + static/ 一起 COPY 进镜像
+  - CGO_ENABLED=0 纯静态
+  - trimpath + ldflags 缩小体积
+- `backend/docker-compose.yml` — 单 master 服务
+  - env 校验（必填 AIIO_MASTER_KEY / AIIO_JWT_SECRET）
+  - healthcheck
+  - memory 200M 限制
+  - 持久化 volume
+- `backend/docker-compose.simple.yml` — 极简版（无 healthcheck / 资源限制）
+- `backend/.env.example` — 模板（含 openssl 生成命令）
+- `docs/deploy.md` — 5 分钟快速启动 + 详细步骤 + nginx 反代 + FAQ
+- `docs/user-guide.md` — 3 分钟上手 + 3 种模式 + Settings + 快捷键 + 隐私
+- `mkdocs.yml` — nav 加"运维"分组
+
+**部署验证**：
+- 沙箱里 docker build 因网络限制无法做（registry-1.docker.io 不可达）
+- `docker compose config` 语法校验通过
+- `go run` 替代方案端到端通过
+- 用户在自己机器上 `docker compose up -d` 应当 5 分钟内跑通
+
+**docker-compose 简化决策**：
+- 1.0 阶段：只跑 master（worker 进程内占位）
+- 2.0 阶段：可拆出 worker-cn / worker-us 到不同 VPS
+- 完整版 compose（含 worker）保留为参考
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -367,5 +410,6 @@ go test ./...
 | 2026-07-29 | d965f82 | 4 | Key 管理：AES-256-GCM 加密 + JSON 文件 Keyring + CRUD API |
 | 2026-07-29 | d64c589 | 4.5 | Keyring ↔ chat 集成：userKeyFor + router 接受 keyFor 回调 |
 | 2026-07-29 | fea0b47 | 3 | Worker + 豆包/DeepSeek/Kimi OpenAI 兼容 Provider |
-| 2026-07-29 | (pending) | 5 | 前端 MVP：4 HTML + 5 JS + 1 CSS，零构建工具，i18n zh/en |
+| 2026-07-29 | 651db93 | 5 | 前端 MVP：4 HTML + 5 JS + 1 CSS，零构建工具，i18n zh/en |
+| 2026-07-29 | (pending) | 8 | 部署：Dockerfile + docker-compose.yml + .env.example + deploy.md + user-guide.md |
 

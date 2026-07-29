@@ -1,62 +1,47 @@
 version: "3.9"
 
-# 1.0 编排示例：
-#   - master：用户面，对外暴露 8080
-#   - worker-cn：国内，承载豆包/DeepSeek/Kimi
-#   - worker-us：美国，承载 OpenAI/Claude
-#
-# master 与 worker 之间用内部网络（backend 桥接）通信。
-# 真实部署时 worker-us 应部署在美西 VPS，worker-cn 在国内。
+# AI All-in-One 1.0 部署示例
+# 单 master 进程，包含所有 5 个 provider（mock + 豆包/DeepSeek/Kimi）
+# 1.0 阶段：worker role 进程内占位，不真做远程转发
+# 2.0 阶段：可拆出 worker-cn / worker-us 部署到不同区域
 
 services:
   master:
     build: .
     image: aiio:latest
     container_name: aiio-master
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
       AIIO_ROLE: master
       AIIO_CONFIG: /configs/master.yaml
-    ports:
-      - "8080:8080"
+      # 必填：32 字节 master key（用于 AES-GCM 加密用户 API Key）
+      AIIO_MASTER_KEY: "${AIIO_MASTER_KEY:?AIIO_MASTER_KEY must be set (32 bytes)}"
+      # 必填：JWT 签名密钥（1.0 简化校验，2.0 接真 JWT）
+      AIIO_JWT_SECRET: "${AIIO_JWT_SECRET:?AIIO_JWT_SECRET must be set}"
+      # 可选：开发模式 token（1.0 简化鉴权）
+      AIIO_AUTH_TOKEN: "${AIIO_AUTH_TOKEN:-devtoken}"
     volumes:
       - ./configs:/configs:ro
-      - master-data:/data
-    networks: [backend]
-    restart: unless-stopped
-
-  worker-cn:
-    image: aiio:latest
-    container_name: aiio-worker-cn
-    environment:
-      AIIO_ROLE: worker
-      AIIO_REGION: cn
-      AIIO_CONFIG: /configs/worker-cn.yaml
-    volumes:
-      - ./configs:/configs:ro
-    networks: [backend]
-    restart: unless-stopped
-    # 国内 Worker 也可放用户本机或国内云
-
-  worker-us:
-    image: aiio:latest
-    container_name: aiio-worker-us
-    environment:
-      AIIO_ROLE: worker
-      AIIO_REGION: us-west
-      AIIO_CONFIG: /configs/worker-us.yaml
-    volumes:
-      - ./configs:/configs:ro
-    networks: [backend]
-    restart: unless-stopped
-    # 实际部署：把这一段迁到美西 VPS，删 networks 用公网通信
-    # deploy:
-    #   replicas: 1
-    #   placement:
-    #     constraints: [node.labels.region==us-west]
+      - aiio-data:/data
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/aiio"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    # 资源限制（1.0 阶段：100MB 内存足够）
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+          cpus: "0.5"
 
 networks:
-  backend:
-    driver: bridge
+  default:
+    name: aiio-net
 
 volumes:
-  master-data:
+  aiio-data:
+    name: aiio-data
