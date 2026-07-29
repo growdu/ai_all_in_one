@@ -90,7 +90,8 @@ backend/
 │   │
 │   ├── transport/               # HTTP 客户端与流式
 │   │   ├── http_client.go       # fasthttp/nethttp + 连接池 + 重试
-│   │   └── sse.go               # SSE 解析（厂商→ChatChunk）
+│   │   ├── sse.go               # SSE 解析（厂商→ChatChunk）
+│   │   └── sse_cache.go         # 流缓存 + 续传（review 2.2）
 │   │
 │   ├── security/                # 鉴权 / 加密
 │   │   ├── aesgcm.go          # AES-256-GCM，Key 加密与通道封装共用

@@ -149,6 +149,52 @@ export function useSSE() {
 }
 ```
 
+### 4.1.1 断线重连（review 2.2）
+
+按 [统一协议 §1.2.1](../api/01-protocol.md#sse-resume) 实现：
+
+**状态机**：
+
+```
+  connect
+     ↓
+  streaming ───disconnect──→ retrying (短抖动 1s)
+     ↑                            │
+     │                            ├──success──→ streaming
+     │                            │
+     │                            └──fail────→ resuming (调续传端点)
+     │                                          │
+     │                                          ├──success──→ streaming
+     │                                          │
+     │                                          └──fail────→ failed (UI 提示)
+     │
+  done
+```
+
+**实现要点**：
+
+```typescript
+// composables/useSSE.ts 增强版
+export function useSSEWithResume() {
+  // 1. fetch 失败时记录 lastChunkIndex
+  // 2. 短抖动（1s）后重试
+  // 3. 重试仍失败 → GET /api/v1/chat/completions/{id}?from_chunk=N
+  // 4. 续传失败 → 提示"对话已断开，建议开启新对话"
+  // 5. 移动端 network change 事件触发主动重连
+  // 6. 按 id 去重：相同 id 的 chunk 不重复 append
+}
+```
+
+**为什么是协议层的责任**：
+- 不靠前端 hardcode 重试逻辑
+- Master 端能控缓存窗口（5min）避免无限续传
+- 续传端点是公开 API，未来其它客户端（LobeChat 等）也能用
+
+**UI 反馈**：
+- 重连过程中显示 "正在恢复对话..."
+- 重连成功隐藏
+- 续传失败显示 "对话已断开" + "开启新对话" 按钮
+
 ### 4.2 useChat 状态机
 
 ```typescript

@@ -135,6 +135,52 @@ POST /api/v1/chat/completions
 
 流式响应：SSE 格式，与 OpenAI 一致，前端可直接用 openai SDK 风格的解析。
 
+### 1.2.1 SSE 断线重连 {#sse-resume}
+
+> 解决 review 2.2：网络抖动 / Worker 重启 / Master 升级 → 整个对话中断。
+
+**chunk 序号**：
+
+```
+data: {"id": "chatcmpl-xxx", "chunk_index": 0, "delta": "Go "}
+data: {"id": "chatcmpl-xxx", "chunk_index": 1, "delta": "interface "}
+...
+data: {"id": "chatcmpl-xxx", "chunk_index": 42, "delta": "...", "finish_reason": "stop"}
+data: [DONE]
+```
+
+- 每个 chunk 必带 `id`（一次完整 chat 的唯一 ID）和 `chunk_index`（从 0 递增）
+- 失败重发保留同样的 `id`，前端可按 id 去重
+
+**续传端点**：
+
+```
+GET /api/v1/chat/completions/{id}?from_chunk=<N>
+```
+
+- `from_chunk=N` 表示从序号 N 开始重发（包含 N）；`from_chunk=0` 表示全量重发
+- 响应是 SSE，格式与正常 chat 一致
+- Master 缓存最近 5 分钟的 chunk 序列（in-memory LRU，默认 1000 条/chat）
+- 缓存过期或 chat 太久 → 410 Gone
+- compare 模式续传：`from_chunk=N` 返回所有 provider 的累积流（按原 provider 字段标识）
+
+**响应头**（让前端知道缓存窗口）：
+
+```
+X-AIIO-Chat-Cache-Window: 300      # 缓存窗口秒数
+X-AIIO-Chat-Cache-TTL: 240         # 剩余可续传秒数
+```
+
+**为什么 1.0 就定义**：
+- 没用过 1.0 的用户不知道"对话中断丢一段"是产品 bug 还是网络问题
+- 现在协议定好，前端 useSSE 直接接；1.0 实施时一并实现 Master 端缓存
+- 1.0 投入 ≈ 1 人天，回报巨大
+
+**1.0 落地**：
+- Master 加 `internal/transport/sse_cache.go`（LRU + 5min TTL）
+- 路由加 GET /api/v1/chat/completions/{id} 续传
+- 前端 useSSE 加断线重连状态机（见 frontend 文档）
+
 ### 1.3 文件上传（多模态准备）
 
 ```
