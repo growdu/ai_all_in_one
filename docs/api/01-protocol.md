@@ -68,6 +68,7 @@ POST /api/v1/chat/completions
 扩展点：
 - `messages[].attachments[]`：本系统的文件 ID（前端上传后拿到），后端负责拉取并注入
 - 后续加 `tools`、`response_format` 等 OpenAI 字段时直接透传
+- `compare` 字段：对比模式扩展，详见 [路由策略](../architecture/01-routing-strategy.md#compare-mode)
 
 流式响应：SSE 格式，与 OpenAI 一致，前端可直接用 openai SDK 风格的解析。
 

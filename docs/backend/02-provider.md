@@ -118,9 +118,13 @@ backend/
 │   │       ├── ratelimit.go     # 令牌桶
 │   │       └── recovery.go
 │   │
-│   ├── routing/                 # Master 专用：决定请求发到哪个 Worker
-│   │   ├── router.go
-│   │   └── strategy.go          # by-region / by-provider / fallback
+│   ├── routing/                 # Master 专用：决定请求发到哪个 Provider
+│   │   ├── router.go            # single/auto/compare 三模式分发
+│   │   ├── strategy.go          # by-region / by-provider / failover
+│   │   ├── signals.go           # 滑动窗口信号收集
+│   │   ├── scoring.go           # auto 模式打分公式
+│   │   └── compare.go           # 并行 compare 实现
+│   │                            # 详见 docs/architecture/01-routing-strategy.md
 │   │
 │   └── config/
 │       └── config.go            # YAML + env 加载

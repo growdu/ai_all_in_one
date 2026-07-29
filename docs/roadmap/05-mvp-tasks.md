@@ -21,12 +21,25 @@
 ## Phase 2：Master 角色（2 天）
 
 - [ ] Task 2.1：GET /api/v1/models（聚合所有 Worker 暴露的 provider）
-- [ ] Task 2.2：POST /api/v1/chat/completions（非流式）
-- [ ] Task 2.3：POST /api/v1/chat/completions（流式 SSE 透传）
-- [ ] Task 2.4：Routing 策略：by-provider + failover
+- [ ] Task 2.2：POST /api/v1/chat/completions（single 模式非流式）
+- [ ] Task 2.3：POST /api/v1/chat/completions（single 模式流式 SSE 透传）
+- [ ] Task 2.4：Routing 单模式分发（router.go）
 - [ ] Task 2.5：Worker 健康检查（周期性 ping）
 - [ ] Task 2.6：JWT 签发与校验
 - [ ] Task 2.7：统一错误中间件
+
+## Phase 2.5：Routing 进阶（2 天，单列阶段）
+
+- [ ] Task R.1：Signal 滑动窗口实现（signals.go）
+- [ ] Task R.2：Scoring 打分公式（scoring.go）+ 4 因子权重
+- [ ] Task R.3：auto 模式：候选池收敛 + 选 1 + 失败 fallback 1 次
+- [ ] Task R.4：compare 模式：并行发 N 个 Provider（compare.go）
+- [ ] Task R.5：compare 模式：流式 SSE 多 provider chunk
+- [ ] Task R.6：响应扩展：compare 包装 + 错误码
+- [ ] Task R.7：用户事件采集（user_switched / user_pinned → 调 user_preference）
+- [ ] Task R.8：前端 compare UI（side_by_side + stacked）
+- [ ] Task R.9：用户 👍/👎 反馈入口
+- [ ] Task R.10：单测（scoring 公式 + 信号衰减 + 候选池过滤）
 
 ## Phase 3：Worker 角色（1 天）
 
@@ -81,7 +94,7 @@
 - [ ] Task 8.4：用户文档 docs/user-guide.md
 - [ ] Task 8.5：部署文档 docs/deploy.md（master + 多 worker）
 
-**总计 ≈ 11 人天**（不含架构设计文档）
+**总计 ≈ 13 人天**（不含架构设计文档）
 
 ## 2.0+ 暂列待办
 
