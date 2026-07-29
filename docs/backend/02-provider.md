@@ -365,6 +365,61 @@ func Register(name, baseURL string, models []ModelInfo) {
 
 1.0 用 AES-GCM + 共享密钥；2.0 上 mTLS 后可考虑去掉这个 header，靠 mTLS 通道本身保证安全。
 
+## 九点二、SQLite 可靠性（review 2.4）
+
+1.0 用 modernc.org/sqlite 纯 Go 驱动。必须开的 PRAGMA 与备份策略：
+
+**启动时 PRAGMA**（`internal/storage/sqlite.go` 初始化时执行）：
+
+```sql
+PRAGMA journal_mode = WAL;           -- 读写并发，写不阻塞读
+PRAGMA synchronous = NORMAL;         -- WAL 模式下安全，崩溃最多丢最后一次事务
+PRAGMA foreign_keys = ON;            -- 启用外键（SQLite 默认关闭）
+PRAGMA busy_timeout = 5000;          -- 5s 忙等，避免 SQLITE_BUSY
+PRAGMA temp_store = MEMORY;          -- 临时表放内存，提速
+```
+
+**WAL checkpoint**：
+- 默认 SQLite 在 WAL 满 1000 页时自动 checkpoint
+- 1.0 用户少可接受
+- 2.0 上线后加手动 checkpoint：每天低峰期调 `PRAGMA wal_checkpoint(TRUNCATE)`
+
+**备份策略**（`internal/storage/backup.go`）：
+
+| 周期 | 方式 | 保留 | 实现 |
+|------|------|------|------|
+| 每小时 | `VACUUM INTO '/backup/db-YYYYMMDDHH.db'` | 24 份 | 定时 goroutine |
+| 每天 | 整库 cp 到 `/backup/daily-YYYYMMDD.db` | 30 份 | cron / docker 外部脚本 |
+| 启动时 | 上次备份完整性 check（`PRAGMA integrity_check`） | N/A | 启动流程 |
+
+**磁盘空间预估**（1.0）：
+
+- 1 个用户 1000 条对话 × 5KB/条 ≈ 5MB
+- 1000 用户 ≈ 5GB
+- WAL 文件额外 ~10%
+- 备份 24h × 5GB ≈ 120GB，**1.0 不可能达到**，策略可降到每 6h 备份 + 保留 4 份
+
+**为什么不开 FULL 同步**：
+- WAL + NORMAL 已能保证崩溃后数据库一致
+- FULL 性能差 10x，1.0 不值得
+- 2.0 真有合规需求时再切
+
+**为什么 1.0 就要 WAL**：
+- 不用 WAL → 写阻塞读 → 聊天时存对话历史会卡住当前响应
+- 开 WAL 几乎零成本（写多一行配置）
+- 不用等需要才加
+
+**故障恢复流程**（写到 deploy.md）：
+
+```
+1. 启动时 integrity_check 失败
+2. 报警：DB corrupted at <path>
+3. 尝试用最近 hourly 备份恢复：
+   cp /backup/db-latest.db /data/master.db
+4. 仍失败 → 用 daily 备份
+5. 全部失败 → 联系用户，全新初始化（Key 全部要重配）
+```
+
 ## 九、为什么这套设计能撑住扩展
 
 | 未来需求 | 扩展点 | 影响面 |
@@ -375,7 +430,7 @@ func Register(name, baseURL string, models []ModelInfo) {
 | Master 切到 k8s | Dockerfile 不变，yaml 改 | 部署层 |
 | 切到自营计费 | 已有 usage 路由直接启用 | 已有预留 |
 
-## 九点五、限流策略
+## 九点三、限流策略
 
 1.0 三层独立令牌桶（`golang.org/x/time/rate`），命中后等 0.3s 再判（避免突发）：
 
