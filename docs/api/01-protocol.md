@@ -330,7 +330,7 @@ type MusicProvider interface {
 3. 后续要加 tools / function calling 直接透传即可
 4. 万一哪天想接第三方 OpenAI 兼容客户端（如 NextChat、LobeChat），接口一致
 
-## 四、错误约定
+## 四、错误约定 {#error-format}
 
 统一错误结构：
 
@@ -339,18 +339,59 @@ type MusicProvider interface {
   "error": {
     "code": "provider_rate_limit",
     "message": "豆包 API 限流，请稍后重试",
+    "user_message_key": "errors.provider_rate_limit",
     "provider": "doubao",
     "retry_after": 30
   }
 }
 ```
 
-错误码规范：
-- `auth_missing` / `auth_invalid` — 鉴权问题
-- `model_not_found` — 模型不存在
-- `provider_<name>_error` — 厂商层错误（透传）
-- `provider_rate_limit` — 限流
-- `upstream_timeout` — 超时
-- `internal_error` — 兜底
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `code` | 是 | 机器可读错误码，前端按此做差异化提示 |
+| `message` | 否 | 后端原始 message（开发调试用，前端不直接展示） |
+| `user_message_key` | 否 | 前端 i18n key，1.0 默认不传，前端降级用 `message` |
+| `retry_after` | 否 | 限流/排队场景下提示多少秒后可重试 |
+| `provider` | 否 | 触发错误的 Provider 名 |
 
-前端按 `code` 做差异化提示，详见 frontend 文档。
+**错误码规范**：
+
+| code | 含义 | 触发场景 |
+|------|------|---------|
+| `auth_missing` | 未登录 | 请求无 token |
+| `auth_invalid` | 登录失效 | token 过期/伪造 |
+| `model_not_found` | 模型不存在 | 用户选了一个不存在的 model |
+| `provider_<name>_error` | 厂商层错误 | 透传厂商错误，`<name>` 是 Provider id |
+| `provider_rate_limit` | 厂商限流 | Provider 公开 RPM 用尽 |
+| `user_rate_limit` | 用户限流 | 单用户在单位时间内请求过多 |
+| `system_overload` | 系统过载 | Master 并发达到上限 |
+| `upstream_timeout` | 上游超时 | 调用厂商超时 |
+| `no_provider_configured` | 未配 Key | 用户没配任何 Provider |
+| `only_one_provider` | 对比模式 Provider 不足 | compare 模式但只配了 1 个 |
+| `all_providers_failed` | 全部失败 | compare 模式所有 Provider 都报错 |
+| `no_capable_provider` | 无能力匹配 | 请求需要 vision 但没 Provider 支持 |
+| `internal_error` | 兜底 | 未知错误 |
+
+**429 响应**（限流专属）：
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1690521600
+
+{
+  "error": {
+    "code": "user_rate_limit",
+    "retry_after": 30
+  }
+}
+```
+
+**为什么用 code + 可选 user_message_key**：
+- 前端按 lang 渲染：i18n 表 → 用户感知
+- 后端不背 i18n 包袱：只发 code
+- i18n key 找不到时降级用 `message` 字段（开发友好）
+
+**i18n key 命名建议**：`errors.<code>`（如 `errors.user_rate_limit`）。1.0 由前端定义，2.0 由后端 + 前端共同维护。

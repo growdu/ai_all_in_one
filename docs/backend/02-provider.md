@@ -374,6 +374,56 @@ func Register(name, baseURL string, models []ModelInfo) {
 | Master 切到 k8s | Dockerfile 不变，yaml 改 | 部署层 |
 | 切到自营计费 | 已有 usage 路由直接启用 | 已有预留 |
 
+## 九点五、限流策略
+
+1.0 三层独立令牌桶（`golang.org/x/time/rate`），命中后等 0.3s 再判（避免突发）：
+
+| 层 | 维度 | 默认 | 错误码 | 备注 |
+|----|------|------|--------|------|
+| 用户层 | IP + user_token | 100 req/min，burst 20 | `user_rate_limit` | 防止单用户/单 IP 打爆 |
+| Provider 层 | 该 Provider 名 | 公开 RPM × 0.8 | `provider_rate_limit` | 不同 Provider 配额不同，按官方文档调 |
+| 全局并发 | Master 进程 | 500 并发流 | `system_overload` | 实测调，保护 Master 内存/CPU |
+
+**配置项**（`configs/master.yaml`）：
+
+```yaml
+rate_limit:
+  user:
+    requests_per_minute: 100
+    burst: 20
+  provider:
+    openai: 4500      # gpt-4o 公开 5000/min，0.8 系数
+    doubao: 2400      # 豆包公开 3000/min
+    deepseek: 2400
+    kimi: 2400
+    claude: 4000      # claude 公开 5000/min
+  global:
+    concurrent_streams: 500
+```
+
+**实现要点**：
+- 用户层 key = `user:<user_id>`，未登录用户用 IP
+- Provider 层 key = `provider:<name>`，跨用户共享
+- 全局并发用 `chan struct{}` 模拟信号量
+- 命中限流后 retry_after 由令牌桶自动算
+- Worker 调 Provider 失败时也记 Provider 配额消耗
+
+**响应**（详见 [统一协议 §四](../api/01-protocol.md#error-format)）：
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 30
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+```
+
+**为什么三层独立**：
+- 1 个用户刷爆不影响其他用户
+- 1 个 Provider 限流不影响其他 Provider
+- 全局兜底保护 Master 进程不被 OOM
+
+**YAGNI**：1.0 不上分布式限流（Redis 计数），单进程够用；2.0 Master 横向扩展时再切。
+
 ## 十、为什么不用 Service Mesh / Kong / 其他
 
 1. 1.0 用户量小，自己写 routing + mTLS 比引入一套基础设施简单
