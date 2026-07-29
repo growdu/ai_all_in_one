@@ -1,77 +1,87 @@
 # 1.0 实施路线图
 
-> 把架构落到代码的最小切片，按 TDD 风格拆分任务。每个任务 2-5 分钟。
+> 把架构落到代码的最小切片。已从 Python 切换为 Go，按 TDD 风格拆分任务，每个任务 2-5 分钟。
 
 ## Phase 0：项目脚手架（半天）
 
-- [ ] Task 0.1：后端 pyproject.toml + FastAPI 启动
-- [ ] Task 0.2：后端 Dockerfile + docker-compose.yml
-- [ ] Task 0.3：前端 Vite + Vue3 初始化
-- [ ] Task 0.4：前端 Tailwind + Vant 接入
-- [ ] Task 0.5：前端 Proxy 配置 /api → 后端
+- [ ] Task 0.1：后端 `go mod init` + Gin 启动 + /health
+- [ ] Task 0.2：Dockerfile 多阶段（builder → distroless）
+- [ ] Task 0.3：docker-compose 编排：master + worker-cn + worker-us
+- [ ] Task 0.4：configs/{master,worker-cn,worker-us}.yaml 示例
+- [ ] Task 0.5：Makefile（build / test / lint / run-master / run-worker）
 
 ## Phase 1：核心抽象（1 天）
 
-- [ ] Task 1.1：Modality / Capability 枚举
-- [ ] Task 1.2：统一数据模型（Pydantic + TS）
-- [ ] Task 1.3：ProviderRegistry 实现
-- [ ] Task 1.4：OpenAICompatibleProvider 基类
-- [ ] Task 1.5：Provider 协议 Protocol 定义
+- [ ] Task 1.1：Modality / Capability 常量
+- [ ] Task 1.2：ModelInfo / ChatRequest / ChatResponse 结构体
+- [ ] Task 1.3：ChatProvider / MusicProvider interface
+- [ ] Task 1.4：Registry（线程安全 map）
+- [ ] Task 1.5：OpenAI 兼容基类实现 + 单测
 
-## Phase 2：Chat 端到端打通（2 天）
+## Phase 2：Master 角色（2 天）
 
-- [ ] Task 2.1：GET /api/v1/models 路由
-- [ ] Task 2.2：豆包 Provider 适配（首个）
-- [ ] Task 2.3：POST /api/v1/chat/completions 流式
-- [ ] Task 2.4：POST /api/v1/chat/completions 非流式
-- [ ] Task 2.5：DeepSeek Provider
-- [ ] Task 2.6：Kimi Provider
-- [ ] Task 2.7：OpenAI Provider
-- [ ] Task 2.8：统一错误处理中间件
+- [ ] Task 2.1：GET /api/v1/models（聚合所有 Worker 暴露的 provider）
+- [ ] Task 2.2：POST /api/v1/chat/completions（非流式）
+- [ ] Task 2.3：POST /api/v1/chat/completions（流式 SSE 透传）
+- [ ] Task 2.4：Routing 策略：by-provider + failover
+- [ ] Task 2.5：Worker 健康检查（周期性 ping）
+- [ ] Task 2.6：JWT 签发与校验
+- [ ] Task 2.7：统一错误中间件
 
-## Phase 3：用户 Key 管理（1 天）
+## Phase 3：Worker 角色（1 天）
 
-- [ ] Task 3.1：SQLModel + SQLite 初始化
-- [ ] Task 3.2：Fernet 加密工具
-- [ ] Task 3.3：Keyring 服务（存 / 取 / 删）
-- [ ] Task 3.4：POST /api/v1/keys 路由
-- [ ] Task 3.5：GET /api/v1/keys 路由（脱敏）
+- [ ] Task 3.1：Worker 启动与 Provider 注册
+- [ ] Task 3.2：豆包 Provider（用 OpenAI 兼容基类）
+- [ ] Task 3.3：DeepSeek Provider
+- [ ] Task 3.4：Kimi Provider
+- [ ] Task 3.5：OpenAI Provider（海外 Worker）
+- [ ] Task 3.6：Claude Provider（非 OpenAI 兼容，独立实现）
+- [ ] Task 3.7：mTLS / 共享 HMAC 鉴权
 
-## Phase 4：前端 Chat MVP（2 天）
+## Phase 4：用户 Key 管理（1 天）
 
-- [ ] Task 4.1：路由 + 主页布局
-- [ ] Task 4.2：模型选择器（下拉）
-- [ ] Task 4.3：useSSE composable
-- [ ] Task 4.4：useChat composable
-- [ ] Task 4.5：MessageList + MessageItem
-- [ ] Task 4.6：InputBox（含停止按钮）
-- [ ] Task 4.7：Settings 页面（Key 管理）
-- [ ] Task 4.8：错误 toast 集成
+- [ ] Task 4.1：modernc.org/sqlite 初始化（纯 Go，无 CGO）
+- [ ] Task 4.2：AES-GCM 加密工具
+- [ ] Task 4.3：Keyring 存取服务
+- [ ] Task 4.4：POST/GET/DELETE /api/v1/keys 路由
+- [ ] Task 4.5：Key 注入到 Worker 转发头
 
-## Phase 5：文件上传 + 多模态（1 天）
+## Phase 5：前端 Chat MVP（2 天）
 
-- [ ] Task 5.1：POST /api/v1/files
-- [ ] Task 5.2：GET /api/v1/files/{id}
-- [ ] Task 5.3：本地文件存储
-- [ ] Task 5.4：FileUpload 组件
-- [ ] Task 5.5：chat 注入 attachments 流程
+- [ ] Task 5.1：路由 + 主页布局
+- [ ] Task 5.2：模型选择器（下拉）
+- [ ] Task 5.3：useSSE composable
+- [ ] Task 5.4：useChat composable
+- [ ] Task 5.5：MessageList + MessageItem
+- [ ] Task 5.6：InputBox（含停止按钮）
+- [ ] Task 5.7：Settings 页面（Key 管理）
+- [ ] Task 5.8：错误 toast 集成
 
-## Phase 6：移动端适配 + 打磨（1 天）
+## Phase 6：文件上传 + 多模态（1 天）
 
-- [ ] Task 6.1：Vant 主题统一
-- [ ] Task 6.2：响应式布局（媒体查询）
-- [ ] Task 6.3：安全区适配
-- [ ] Task 6.4：暗色模式
-- [ ] Task 6.5：PWA manifest（可装到桌面）
+- [ ] Task 6.1：POST /api/v1/files
+- [ ] Task 6.2：GET /api/v1/files/{id}
+- [ ] Task 6.3：本地文件存储
+- [ ] Task 6.4：FileUpload 组件
+- [ ] Task 6.5：chat 注入 attachments 流程
 
-## Phase 7：部署与文档（半天）
+## Phase 7：移动端适配 + 打磨（1 天）
 
-- [ ] Task 7.1：docker-compose 一键起
-- [ ] Task 7.2：环境变量 .env.example
-- [ ] Task 7.3：用户文档 docs/user-guide.md
-- [ ] Task 7.4：贡献文档 docs/contributing.md
+- [ ] Task 7.1：Vant 主题统一
+- [ ] Task 7.2：响应式布局（媒体查询）
+- [ ] Task 7.3：安全区适配
+- [ ] Task 7.4：暗色模式
+- [ ] Task 7.5：PWA manifest
 
-**总计 ≈ 9 人天**（不含架构设计文档）
+## Phase 8：部署与文档（半天）
+
+- [ ] Task 8.1：docker-compose 一键起
+- [ ] Task 8.2：自签 mTLS CA 脚本（scripts/gen-mtls.sh）
+- [ ] Task 8.3：环境变量 .env.example
+- [ ] Task 8.4：用户文档 docs/user-guide.md
+- [ ] Task 8.5：部署文档 docs/deploy.md（master + 多 worker）
+
+**总计 ≈ 11 人天**（不含架构设计文档）
 
 ## 2.0+ 暂列待办
 

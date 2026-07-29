@@ -1,5 +1,37 @@
-.cache/
-site/
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Python (历史 1.0 设计已迁移到 Go，保留占位以防误增)
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
+.pytest_cache/
+.ruff_cache/
+
+# Go
+bin/
+*.test
+*.out
+coverage.txt
+vendor/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# MkDocs
+.cache/
+site/
+
+# 运行时
+*.db
+*.sqlite
+.env
+.env.local
+data/
+certs/
