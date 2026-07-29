@@ -1,0 +1,26 @@
+server:
+  listen: ":8080"
+  tls:
+    enabled: false   # 1.0 简化版，生产开启 + 反代处理证书
+
+storage:
+  sqlite_path: /data/master.db
+
+security:
+  master_key_env: AIIO_MASTER_KEY
+  jwt_secret_env: AIIO_JWT_SECRET
+
+# Worker 注册表：1.0 静态配置，2.0 改为 Worker 主动注册
+workers:
+  - id: worker-cn
+    region: cn
+    endpoint: http://worker-cn:8443
+    providers: [doubao, deepseek, kimi]
+  - id: worker-us
+    region: us-west
+    endpoint: http://worker-us:8443
+    providers: [openai, claude]
+
+routing:
+  strategy: by-provider       # by-provider / by-latency / failover
+  health_check_interval: 10s

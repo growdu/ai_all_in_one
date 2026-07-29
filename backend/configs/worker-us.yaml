@@ -1,0 +1,17 @@
+server:
+  listen: ":8443"
+  tls:
+    enabled: false
+    # 2.0 启用 mTLS：
+    # cert_file: /certs/worker.crt
+    # key_file: /certs/worker.key
+    # client_ca_file: /certs/master-ca.crt
+
+# 美国 Worker：OpenAI / Claude（无网络限制）
+providers:
+  openai:
+    base_url: https://api.openai.com/v1
+    upstream_timeout: 60s
+  claude:
+    base_url: https://api.anthropic.com
+    upstream_timeout: 60s

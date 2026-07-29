@@ -1,0 +1,20 @@
+server:
+  listen: ":8443"
+  tls:
+    enabled: false
+    # 1.0 简化：内网 HTTP；2.0 开启 mTLS
+    # cert_file: /certs/worker.crt
+    # key_file: /certs/worker.key
+    # client_ca_file: /certs/master-ca.crt
+
+# 当前 Worker 负责的厂商（区域国内）
+providers:
+  doubao:
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    upstream_timeout: 60s
+  deepseek:
+    base_url: https://api.deepseek.com/v1
+    upstream_timeout: 60s
+  kimi:
+    base_url: https://api.moonshot.cn/v1
+    upstream_timeout: 60s
