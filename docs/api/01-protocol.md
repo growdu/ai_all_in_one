@@ -138,11 +138,53 @@ POST /api/v1/chat/completions
 ### 1.3 文件上传（多模态准备）
 
 ```
-POST /api/v1/files      multipart/form-data
-GET  /api/v1/files/{id}
+POST   /api/v1/files       multipart/form-data
+GET    /api/v1/files/{id}
+DELETE /api/v1/files/{id}     1.0 用户上传的；2.0+ AI 生成的也支持
 ```
 
 1.0 chat 主要用图片/文档，返回 `file_id` 后在 chat 时通过 `attachments` 引用。
+
+**File 对象 schema**：
+
+```json
+{
+  "id": "file_xxx",
+  "source": "user_upload",
+  "modality": "image",
+  "owner_user_id": "user_xxx",
+  "filename": "photo.png",
+  "size": 102400,
+  "mime_type": "image/png",
+  "created_at": "2026-07-29T10:00:00Z",
+  "expires_at": null,
+  "url": "/api/v1/files/file_xxx"
+}
+```
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `source` | 是 | `user_upload`（用户上传）/ `ai_generated`（AI 产出） |
+| `modality` | 是 | `image` / `audio` / `video` / `document` |
+| `owner_user_id` | 是 | 归属用户（仅本人可读/删，admin 例外） |
+| `expires_at` | 否 | 过期时间，详见生命周期 |
+
+**生命周期与归属规则**：
+
+| source | 默认保留 | 永不过期 | 关联 Job 任务 |
+|--------|---------|---------|--------------|
+| `user_upload` | 永久（用户主动删） | N/A | 不关联 |
+| `ai_generated` | 30 天 | `?permanent=true` 可永久 | 关联到产出它的 `job_id` |
+
+**删除规则**：
+- 用户只能删自己的 file
+- `ai_generated` 关联到 job 时，job 删除/过期会自动联动删除
+- DELETE 请求返回 204，幂等
+
+**为什么 1.0 就定义**：
+- 2.0+ 加音乐/视频/图片生成时立刻用上
+- 现在补这一条 ≈ 1 个 schema 描述
+- 2.0 临时加就要改 3 处（API、存储、UI）
 
 ### 1.4 预留接口（1.0 不实现，2.0 启用）
 
