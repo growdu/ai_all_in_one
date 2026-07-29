@@ -403,6 +403,76 @@ function showError(err: ApiError) {
 - i18n key 找不到时降级用 `message` 字段（开发友好）
 - **前端永远不直接展示 `message` 字段**（后端 message 是开发用的，可能带堆栈）
 
+## 八、i18n 框架（review 1.5）
+
+> 解决"海外用户/中文不熟用户用不了，将来想加英文要重构"。
+
+**技术选型**：`vue-i18n@9`（Vue 3 官方推荐），从首行代码就接入，不留硬编码中文。
+
+**目录结构**：
+
+```
+src/i18n/
+├── index.ts        # createI18n 入口
+├── zh.ts           # 中文
+└── en.ts           # 英文
+```
+
+**接入 main.ts**：
+
+```typescript
+import { createI18n } from 'vue-i18n'
+import zh from './i18n/zh'
+import en from './i18n/en'
+
+export const i18n = createI18n({
+  legacy: false,           // Composition API 模式
+  locale: localStorage.getItem('aiio.lang') || 'zh',
+  fallbackLocale: 'en',
+  messages: { zh, en },
+})
+```
+
+**顶栏语言切换**：
+
+```vue
+<select v-model="i18n.global.locale" @change="onLangChange">
+  <option value="zh">中文</option>
+  <option value="en">English</option>
+</select>
+```
+
+**关键规则**：
+
+1. **所有 UI 文案走 t()**，不留硬编码中文
+2. **1.0 支持 zh / en 两种**，2.0 扩更多
+3. **后端错误 code 用 t('errors.' + code)**，已在 §6.1 定义
+4. **i18n 文件用 flat 结构**（不是嵌套），key 用 dot path：
+
+```ts
+// zh.ts
+export default {
+  app: { title: 'AI 助手', settings: '设置' },
+  chat: { send: '发送', stop: '停止', placeholder: '输入消息...' },
+  settings: { apiKeys: '我的 API Key', save: '保存' },
+  errors: {
+    auth_missing: '请先登录',
+    provider_rate_limit: '服务商繁忙，请稍后重试',
+    // ... 13 种错误码，见 §6.1
+  },
+}
+```
+
+**为什么 1.0 早期就接**：
+- 重构成本 = O(全部 UI 文案)
+- 1.0 投入 ≈ 0.5 人天
+- 2.0 才接 = O(全部 UI 文案 + 业务逻辑)（因为硬编码已经到处散落）
+
+**验收标准**：
+- 切换语言后所有可见文案立即变化
+- 设置中语言选择持久化（localStorage）
+- 找不到的 key 降级用 fallbackLocale（en）
+
 ## 七、移动端 H5 适配
 
 - viewport meta：`width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no`
