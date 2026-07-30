@@ -25,12 +25,10 @@ services:
     volumes:
       - ./configs:/configs:ro
       - aiio-data:/data
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/aiio"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
+    # distroless 镜像无 curl/wget；1.0 阶段不做 in-container healthcheck
+    # 由外部（反代 / k8s liveness probe）打 /health 端点
+    # healthcheck:
+    #   test: ["CMD", "/usr/local/bin/aiio", "--healthcheck"]
     # 资源限制（1.0 阶段：100MB 内存足够）
     deploy:
       resources:

@@ -1,34 +1,81 @@
 # AI All-in-One
 
-> 一句话：把豆包、ChatGPT、DeepSeek、Kimi 等大模型封装成「开箱即用」的产品，未来可平滑扩展音乐、视频、图片等生成式 AI 能力。
+> 把豆包、DeepSeek、Kimi 等大模型封装成「配 Key 即用」的产品，
+> 未来平滑扩展音乐 / 视频 / 图片等生成式 AI。
 
-## 项目目标
+## 1.0 现状
 
-- 面向普通用户的统一 AI 入口，用户无需关心 API Key、代理、协议差异
-- 1.0 用户自配 Key（后端仅做透传代理 + 协议适配），后续可平滑升级为聚合计费
-- 一套前端，同时支持 Web / 移动端 H5 / 小程序
-- 后端只做"代理 + 适配 + 抽象"，不绑定任何一家厂商
+- 用户自配 API Key（豆包 / DeepSeek / Kimi / OpenAI 兼容）
+- 1 个二进制同时充当 Master + Worker
+- 一套前端 HTML（移动端优先），覆盖 Web + 移动 H5
+- 后端只做透传代理 + 协议适配，不绑任何厂商
+- 14 Phase 全部完成，121 tests 全过
+- 已实现：chat + 文件上传 + 历史会话 + Keyring + auto/compare 路由 + SSE 流式
+
+## 5 分钟上手
+
+```bash
+git clone https://github.com/growdu/ai_all_in_one.git
+cd ai_all_in_one/backend
+
+# 编译
+go build -o aiio ./cmd/aiio
+
+# 生成密钥
+export AIIO_MASTER_KEY=$(openssl rand -base64 32)
+export AIIO_JWT_SECRET=$(openssl rand -hex 32)
+
+# 启动 master
+AIIO_ROLE=master ./aiio
+
+# 浏览器打开
+open http://localhost:8080
+```
+
+按 onboarding 引导：选 Provider → 填 API Key → 开始聊天。
 
 ## 目录约定
 
 ```
 ai_all_in_one/
-├── docs/                   # 设计文档（先写代码前先看这里）
-│   ├── architecture/       # 顶层架构
-│   ├── api/                # 接口契约
-│   ├── frontend/           # 前端设计
-│   ├── backend/            # 后端设计
-│   └── roadmap/            # 扩展路线
-├── backend/                # 后端实现（Python · FastAPI）
+├── docs/                   设计文档
+│   ├── architecture/       顶层架构
+│   ├── api/                接口契约
+│   ├── backend/            后端设计
+│   ├── frontend/           前端设计
+│   ├── implementation/     实施跟踪
+│   ├── roadmap/            扩展路线
+│   ├── deploy.md           部署指南
+│   └── user-guide.md       用户手册
+├── backend/                Go 后端（单 binary 双角色）
+│   ├── cmd/aiio/           master / worker 入口
+│   ├── internal/
+│   │   ├── api/            5 个 HTTP handler
+│   │   ├── core/           Modality / Registry / ChatProvider
+│   │   ├── providers/      mock + doubao + deepseek + kimi + openai 兼容
+│   │   ├── routing/        4 因子打分 + auto/compare
+│   │   ├── security/       AES-GCM Keyring
+│   │   ├── storage/        FileStore + ConvRepo + MsgRepo
+│   │   ├── capabilities/   chat 附件预处理
+│   │   ├── config/         YAML 配置加载
+│   │   ├── observability/  health / metrics / log
+│   │   └── role/           Master + Worker 启动逻辑
+│   └── static/             12 个前端静态文件（HTML + JS + CSS）
 └── frontend/
-    ├── web/                # Web + 移动端 H5（Vue3 · 优先实现）
-    └── mobile/             # 原生 App 占位（后续）
+    └── web/                Vue/Vant 脚手架（备用，1.0 用 backend/static/）
 ```
 
 ## 阅读顺序
 
-1. docs/architecture/00-overview.md    — 顶层架构与核心抽象
-2. docs/api/01-protocol.md             — 统一接口契约
-3. docs/backend/02-provider.md         — Provider 适配层设计
-4. docs/frontend/03-web.md             — Web 前端设计
-5. docs/roadmap/04-extensibility.md    — 音乐/视频/图片扩展路线
+1. docs/user-guide.md            — 用户视角使用说明
+2. docs/deploy.md                — 自部署指南
+3. docs/architecture/00-overview — 顶层架构与核心抽象
+4. docs/api/01-protocol.md       — 统一接口契约
+5. docs/backend/02-provider.md   — Provider 适配层
+6. docs/frontend/03-web.md       — 前端设计
+7. docs/implementation/00-progress — 15 Phase 实施进度
+8. docs/roadmap/04-extensibility — 音乐 / 视频 / 图片扩展路线
+
+## License
+
+暂未指定（私有 / 内部项目）。

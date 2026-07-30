@@ -16,6 +16,8 @@
 
 ## 二、5 分钟快速启动（最简路径）
 
+### 方式 A — Docker Compose（推荐）
+
 ```bash
 # 1. 克隆代码
 git clone https://github.com/growdu/ai_all_in_one.git
@@ -39,6 +41,34 @@ curl http://localhost:8080/health
 open http://localhost:8080
 # 走 onboarding → 选 provider → 配 Key → 开始聊天
 ```
+
+### 方式 B — 直接跑二进制（开发/调试）
+
+```bash
+cd ai_all_in_one/backend
+
+# 编译
+go build -o aiio ./cmd/aiio
+
+# 生成密钥
+export AIIO_MASTER_KEY=$(openssl rand -base64 32)
+export AIIO_JWT_SECRET=$(openssl rand -hex 32)
+
+# 启动 master（数据存到 ./data/）
+mkdir -p ./data
+AIIO_ROLE=master AIIO_CONFIG=./configs/master.yaml \
+  ./aiio
+
+# 浏览器打开
+open http://localhost:8080
+```
+
+### 方式 C — 临时试用（mock provider，免配 key）
+
+mock provider 不需要真 API Key，1.0 已内置。
+
+启动后 onboarding 选 **mock**，直接可以聊（返回 echo）。
+适合先体验 UI / 验证部署，再去申请真 Key。
 
 ## 三、详细步骤
 
