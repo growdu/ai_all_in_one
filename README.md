@@ -79,3 +79,12 @@ ai_all_in_one/
 ## License
 
 暂未指定（私有 / 内部项目）。
+
+## 下一步（1.1 增量）
+
+详见 [docs/roadmap/05-mvp-tasks.md](docs/roadmap/05-mvp-tasks.md) §1.1：
+
+- **minimax Provider** — Anthropic 兼容端点，独立实现
+- **Claude Provider** — 与 minimax 共享 Anthropic 基类
+- **共享 key 池** — 项目维护者充值免费 key，按 IP 限流，降低用户门槛
+- 历史会话搜索 / 导出对话

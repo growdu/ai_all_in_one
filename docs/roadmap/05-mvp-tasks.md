@@ -96,6 +96,23 @@
 
 **总计 ≈ 13 人天**（不含架构设计文档）
 
+## 1.1 增量（v1.0.1 之后的小迭代）
+
+- [ ] **minimax Provider**（Anthropic 兼容端点 `https://api.minimaxi.com/anthropic`）
+    - 协议：Anthropic Messages API（与 OpenAI Chat Completions 不同，需独立实现）
+    - 模型：MiniMax-M3（claude 风格）
+    - 文件：`backend/internal/providers/minimax/provider.go` + `provider_test.go`
+    - 模板：复用 `openaicompat` 的结构，但替换请求/响应协议
+    - 测试：mock HTTP server 验证消息格式转换
+    - 关联：env var `ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic` 已存在（系统层使用），用户应用层需要单独配置 key
+- [ ] **Claude Provider**（同一 Anthropic 协议，可与 minimax 共享基类）
+- [ ] **历史会话搜索**（按 title / content 过滤）
+- [ ] **导出对话**（Markdown / JSON）
+- [ ] **共享 key 池**（项目维护者充值的免费 key，按 IP 限流，降低用户门槛）
+    - 详见 docs/user-guide.md §三 提到的"豆包/DeepSeek/Kimi 不都需要 key 吗"反馈
+    - 风险：滥用 / 成本失控
+    - 设计要点：每用户每分钟请求数 + 每用户 token 配额 + 月度总预算
+
 ## 2.0+ 暂列待办
 
 - [ ] 图片生成 capability（image）
