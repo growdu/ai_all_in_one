@@ -17,6 +17,7 @@
 | 5 | 前端 MVP（HTML+JS 5 页） | ✅ 完成（1.0 极简版，5 HTML + 5 JS + 1 CSS） | 静态文件服务 + API 共存，端到端 GET 4 页 + 3 资源 + /api/v1/models 全 200 |
 | 6 | 文件上传 + 多模态 | ✅ 完成（本地文件系统 + 截断） | 10 storage tests + 8 file handler tests + 端到端 upload/list/reject |
 | 6.5 | 附件注入 chat 链路 | ✅ 完成（file_id → messages） | 6 preprocessing tests + 端到端上传→chat→AI 看到附件内容 |
+| 1.1.1 | 历史会话 CRUD | ✅ 完成（conv/msg repo + 5 端点 + 前端 history 页） | 7 conv/msg tests + 6 convs handler tests + 端到端 POST/GET/PATCH/DELETE + 404 |
 | 7 | 移动端打磨（暗色 / a11y / PWA） | ✅ 完成 | CSS 暗色变量 + prefers-color-scheme + 主题切换；aria-label + focus 环 + 44pt 触摸目标；PWA manifest.webmanifest 合法 |
 | 8 | 部署与文档 | ✅ 完成 | Dockerfile 写好、docker-compose.yml 通过 `docker compose config` 校验、deploy.md + user-guide.md + .env.example 完整 |
 
@@ -70,9 +71,13 @@ backend/
 │   │   └── kimi/                           # Kimi（Moonshot）
 │   │       ├── kimi.go
 │   │       └── kimi_test.go                # 2 tests
-│   ├── storage/                            # Phase 6: 文件存储
+│   ├── storage/                            # Phase 6 + 1.1.1: 文件/会话/消息存储
 │   │   ├── file.go                         # 本地文件系统 + 截断
-│   │   └── file_test.go                    # 10 tests
+│   │   ├── file_test.go                    # 10 tests
+│   │   ├── conv.go                         # 会话仓储（CRUD + pin）
+│   │   ├── conv_test.go                    # 7 tests
+│   │   ├── msg.go                          # 消息仓储
+│   │   └── codec.go                        # jsonEncode helper
 │   │   ├── onboarding.html / .js           # 4 步引导
 │   │   ├── home.html / .js                 # Chat 主页面 + SSE 流式
 │   │   ├── settings.html / .js             # API Key + AI 角色 + 高级参数
@@ -577,6 +582,76 @@ curl -s http://localhost:18080/home.html | grep theme-color
 - 桌面快捷方式（macOS dock / Windows taskbar）
 - 长按 / 滑动 / 拖拽等高级手势
 
+## 端到端验证（Phase 1.1.1 历史会话）
+
+```bash
+# 1. POST /api/v1/conversations
+curl -X POST .../conversations -d '{"model":"mock-echo"}'
+# → 201 {"id":"conv_1a77a2dca1c5fa0b","title":"新对话","model":"mock-echo",...}
+
+# 2. GET /api/v1/conversations
+curl .../conversations
+# → {"conversations":[{...}]}
+
+# 3. GET /api/v1/conversations/{id}
+curl .../conversations/conv_1a77a2dca1c5fa0b
+# → {"conversation":{...},"messages":null}
+
+# 4. PATCH 改标题
+curl -X PATCH .../conversations/conv_xxx -d '{"title":"我的新对话"}'
+# → 200 {"title":"我的新对话",...}
+
+# 5. DELETE
+curl -X DELETE .../conversations/conv_xxx
+# → 204
+
+# 6. GET after delete
+curl .../conversations/conv_xxx
+# → 404 {"error":{"code":"conv_not_found","message":"conversation not found"}}
+```
+
+**磁盘结构**：
+```
+/data/conv_index.json   # 会话索引（0600）
+/data/msg_index.json    # 消息索引（0600）
+```
+
+**前端 history.js 真实功能**：
+- 列出 conv（按 pinned + updated_at 排序）
+- 新建 conv 按钮（顶部）
+- 打开 conv（跳转 home.html 带 ?conv=ID，存到 localStorage）
+- 改名（PATCH title，弹 prompt）
+- 删除（DELETE，弹 confirm）
+- 相对时间显示（刚刚 / N 分钟前 / N 小时前 / N 天前）
+- 置顶图标（📌）
+- 错误时 showToast 提示
+
+**核心实现**：
+- `internal/storage/conv.go` — ConvRepo（CRUD + Pin + List 排序）
+  - JSON 文件索引（0600）
+  - 跨用户访问返回 ErrConvNotFound
+  - 置顶优先 + 按 updated_at 倒序
+- `internal/storage/msg.go` — MsgRepo
+  - 按 conv_id 过滤
+  - ListByConv 顺时序
+  - 级联删除（Delete conv 时调 deleteByConv）
+- `internal/api/convs.go` — ConvsHandler + ConvItemHandler
+  - 5 端点：GET 列表 / POST 新建 / GET 详情 / PATCH 改标题或置顶 / DELETE
+  - 路由解析：TrimPrefix("/api/v1/conversations/", id)
+- `static/history.js` — 完整 CRUD UI
+- `static/i18n.js` — 加 4 条 history 字符串（open / rename / confirmDelete）
+
+**测试统计**：
+- 累计 116 tests passed（+14）
+  - 之前 102
+  - storage 7 + api 6 + ... = 13 convs 相关（另加 1 修复 404）
+
+**已知 1.0 限制**（留 1.2）：
+- chat 路由不自动落消息：1.0 阶段会话创建了但 chat 时不自动 Append 到 MsgRepo
+- 1.2 计划：chat handler 调完 Provider 后，Append user msg + assistant msg
+- 1.2 计划：home.html 启动时读 ?conv=ID 加载历史消息
+- 1.2 计划：完整 streaming 续接（流中断时保存 partial msg）
+
 ## 实施规则
 
 1. **每个 Phase 1 个或多个 commit**（按 TDD 风格可拆细）
@@ -612,5 +687,6 @@ go test ./...
 | 2026-07-29 | fb086c7 | 8 | 部署：Dockerfile + docker-compose.yml + .env.example + deploy.md + user-guide.md |
 | 2026-07-29 | 0efe4c0 | 6 | 文件上传：本地文件系统 + 截断 + mime 校验 + 端到端 upload/list/reject |
 | 2026-07-29 | 9db371f | 6.5 | 附件注入 chat：preprocessing 把 file_id 解析为文本注入 messages |
+| 2026-07-29 | (pending) | 1.1.1 | 历史会话：conv/msg repo + 5 端点 + history.js 真实 CRUD + i18n 4 字符串 |
 | 2026-07-29 | (pending) | 7 | 移动端打磨：暗色模式 + a11y + PWA manifest + 44pt 触摸目标 |
 

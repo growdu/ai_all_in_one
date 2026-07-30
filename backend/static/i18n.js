@@ -37,6 +37,9 @@ const translations = {
     history: {
       title: '历史对话',
       empty: '暂无历史对话',
+      open: '打开',
+      rename: '重命名',
+      confirmDelete: '确认删除该对话？',
     },
     errors: {
       auth_missing: '请先登录',
@@ -87,6 +90,9 @@ const translations = {
     history: {
       title: 'History',
       empty: 'No conversations yet',
+      open: 'Open',
+      rename: 'Rename',
+      confirmDelete: 'Delete this conversation?',
     },
     errors: {
       auth_missing: 'Please sign in first',

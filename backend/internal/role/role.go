@@ -78,6 +78,10 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	mux.Handle("/api/v1/files", &api.FilesHandler{Store: fileStore, DefaultUser: "default"})
 	mux.Handle("/api/v1/files/", &api.FileItemHandler{Store: fileStore, DefaultUser: "default"})
 
+	// 历史会话（Phase 1.1.1）
+	mux.Handle("/api/v1/conversations", &api.ConvsHandler{Store: fileStore, DefaultUser: "default"})
+	mux.Handle("/api/v1/conversations/", &api.ConvItemHandler{Store: fileStore, DefaultUser: "default"})
+
 	mux.Handle("/api/v1/chat/completions", &api.ChatHandler{
 		Logger:    logger,
 		Registry:  reg,
