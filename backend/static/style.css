@@ -196,7 +196,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .chat-page {
   display: flex; flex-direction: column;
   height: calc(100vh - 50px);
-  max-width: 800px; margin: 0 auto;
+  width: 100%;
+  max-width: 1280px; margin: 0 auto;
+  padding: 0 16px;
 }
 .chat-toolbar {
   display: flex; gap: 8px; padding: 8px 16px;
@@ -222,7 +224,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 .model-multi-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 6px;
 }
 .multi-row {
@@ -269,7 +271,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 /* Compare 模式结果卡（side-by-side 并排） */
 .compare-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
   width: 100%;
 }
@@ -327,7 +329,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   display: flex; flex-direction: column; gap: 12px;
 }
 .message {
-  max-width: 80%;
+  max-width: min(820px, 85%);
   padding: 10px 14px;
   border-radius: 12px;
   white-space: pre-wrap;
