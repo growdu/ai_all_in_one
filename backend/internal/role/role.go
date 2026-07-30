@@ -102,7 +102,15 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 
 	// 静态文件（前端）：1.0 阶段 5 个 HTML 页面在 static/
 	// 1.0 简化：不引入 Vue 工具链，纯 HTML + JS
-	mux.Handle("/", http.FileServer(http.Dir(filepath.Join(".", "static"))))
+	// "/" 重定向到 home.html；其它路径走 FileServer
+	staticDir := filepath.Join(".", "static")
+	fs := http.FileServer(http.Dir(staticDir))
+	// 1.0.1: 开发期强制 no-cache，避免热更新后浏览器用旧版 JS
+	noCacheFs := noCacheMiddleware(fs)
+	mux.Handle("/", &rootHandler{
+		fs: noCacheFs,
+		staticDir: staticDir,
+	})
 
 	logger.Info("master role started",
 		slog.String("addr", cfg.Server.Listen),
@@ -112,6 +120,22 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	)
 
 	return startHTTPServer(context.Background(), cfg.Server.Listen, handler, logger)
+}
+
+// rootHandler 把 "/" 重定向到 home.html，其它路径走 FileServer。
+//
+// 1.0 阶段：避免 FileServer 默认返回目录索引。
+type rootHandler struct {
+	fs        http.Handler
+	staticDir string
+}
+
+func (h *rootHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/" || r.URL.Path == "" {
+		http.Redirect(w, r, "/home.html", http.StatusFound)
+		return
+	}
+	h.fs.ServeHTTP(w, r)
 }
 
 // RunWorker 启动 Worker 进程。
@@ -196,4 +220,16 @@ func initKeyring(cfg *config.Config, logger *slog.Logger) (*security.Keyring, er
 	}
 	logger.Info("keyring initialized", slog.String("path", path))
 	return kr, nil
+}
+
+// noCacheMiddleware 给静态资源加 no-cache 头
+// 1.0.1: 开发期热更新场景，避免浏览器拿到旧 JS
+// 2.0: 改用 hash 命名前端构建
+func noCacheMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		next.ServeHTTP(w, r)
+	})
 }

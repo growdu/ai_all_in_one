@@ -19,10 +19,12 @@ const App = {
     if (!headers['Authorization']) {
       headers['Authorization'] = 'Bearer ' + this.token;
     }
-    if (opts.body && typeof opts.body === 'object' && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json';
+    let body = opts.body;
+    if (body && typeof body === 'object' && !(body instanceof FormData)) {
+      if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(body);
     }
-    const resp = await fetch(this.baseURL + path, { ...opts, headers });
+    const resp = await fetch(this.baseURL + path, { ...opts, headers, body });
     if (resp.status === 204) return null;
     const ct = resp.headers.get('Content-Type') || '';
     if (ct.includes('application/json')) {
@@ -147,4 +149,12 @@ function showToast(msg, duration = 3000) {
   el.style.display = 'block';
   clearTimeout(el._t);
   el._t = setTimeout(() => { el.style.display = 'none'; }, duration);
+}
+
+// 暴露给其它 script（history.js 用 window.App / window.showToast 取）
+// 1.0 简化：classic script 中 const 是 script-scope 共享，
+//         但显式挂 window 兼容未来切 module 模式
+if (typeof window !== 'undefined') {
+  window.App = App;
+  window.showToast = showToast;
 }
