@@ -5,6 +5,7 @@
 const translations = {
   zh: {
     app: { title: 'AI 助手', settings: '设置', theme: '主题' },
+    nav: { history: '历史', newConv: '新建' },
     theme: { light: '浅色', dark: '深色', auto: '自动' },
     onboarding: {
       welcome: '欢迎使用 AI 助手',
@@ -58,6 +59,7 @@ const translations = {
   },
   en: {
     app: { title: 'AI Assistant', settings: 'Settings', theme: 'Theme' },
+    nav: { history: 'History', newConv: 'New' },
     theme: { light: 'Light', dark: 'Dark', auto: 'Auto' },
     onboarding: {
       welcome: 'Welcome to AI Assistant',

@@ -176,6 +176,23 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 
 /* chat page */
+.chat-conv-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px;
+  background: var(--secondary-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.conv-title {
+  font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 50%;
+}
+.conv-id-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: monospace;
+}
 .chat-page {
   display: flex; flex-direction: column;
   height: calc(100vh - 50px);

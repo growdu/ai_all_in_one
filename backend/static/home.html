@@ -27,6 +27,13 @@
   </header>
 
   <main class="chat-page" role="main">
+    <!-- Phase 1.2：会话上下文 -->
+    <div class="chat-conv-bar" role="region" aria-label="当前会话">
+      <span id="conv-title" class="conv-title">新对话</span>
+      <span id="conv-id-label" class="conv-id-label"></span>
+      <a href="history.html" class="btn-secondary" style="margin-left:auto" data-i18n="nav.history">历史</a>
+      <button id="conv-new-btn" class="btn-secondary" data-i18n="nav.newConv">新建</button>
+    </div>
     <div class="chat-toolbar" role="toolbar" aria-label="聊天控制">
       <label for="model-select" class="visually-hidden">模型</label>
       <select id="model-select" aria-label="选择模型"></select>
