@@ -158,6 +158,8 @@ func TestInferProviderFromModel(t *testing.T) {
 		"kimi-k2":            "kimi",
 		"claude-3-opus":      "claude",
 		"mock-echo":          "mock",
+		"MiniMax-M3":         "minimax",
+		"minimax-m3":         "minimax",
 		"foo-bar-baz":        "foo",
 	}
 	for in, want := range cases {

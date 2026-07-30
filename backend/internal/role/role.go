@@ -21,6 +21,7 @@ import (
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/deepseek"
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/doubao"
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/kimi"
+	"github.com/growdu/ai_all_in_one/backend/internal/providers/minimax"
 	"github.com/growdu/ai_all_in_one/backend/internal/providers/mockprovider"
 	"github.com/growdu/ai_all_in_one/backend/internal/routing"
 	"github.com/growdu/ai_all_in_one/backend/internal/security"
@@ -47,6 +48,7 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	reg.RegisterChat(doubao.New())
 	reg.RegisterChat(deepseek.New())
 	reg.RegisterChat(kimi.New())
+	reg.RegisterChat(minimax.New())
 
 	// Routing：4 因子打分 + 滑动窗口
 	signals := routing.NewWindow(200, 0)

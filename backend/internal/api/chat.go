@@ -401,11 +401,18 @@ func (h *ChatHandler) serveStream(ctx context.Context, w http.ResponseWriter, pr
 func inferProviderFromModel(modelID string) string {
 	// 1. 精确前缀匹配（顺序按长度倒序避免短前缀抢先）
 	knownProviders := []string{
-		"deepseek", "doubao", "claude", "openai", "kimi", "mock",
+		"deepseek", "doubao", "claude", "openai", "kimi", "mock", "minimax",
 		"gpt", "gemini", "qwen", "llama", "mistral",
 	}
+	// 先按原 case 匹配，匹配不上再按 lowercase 匹配（兼容 "MiniMax-M3" → "minimax"）
+	lower := strings.ToLower(modelID)
 	for _, p := range knownProviders {
 		if strings.HasPrefix(modelID, p) {
+			return canonicalProviderName(p)
+		}
+	}
+	for _, p := range knownProviders {
+		if strings.HasPrefix(lower, p) {
 			return canonicalProviderName(p)
 		}
 	}
