@@ -89,11 +89,22 @@ async function init() {
   }
 
   userInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Enter' && !e.shiftKey && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       send();
     }
   });
+
+  // textarea 自动撑高（最多 200px）
+  if (userInput) {
+    const autoresize = () => {
+      userInput.style.height = 'auto';
+      const h = Math.min(userInput.scrollHeight, 200);
+      userInput.style.height = h + 'px';
+    };
+    userInput.addEventListener('input', autoresize);
+    autoresize();
+  }
 
   // 附件按钮 → 触发隐藏的 file input
   if (attachBtn && fileInput) {

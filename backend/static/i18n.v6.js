@@ -23,6 +23,7 @@ const translations = {
       stop: '停止',
       thinking: '思考中...',
       attach: '附件',
+      sendHint: 'Ctrl/⌘ + Enter 发送 · Shift + Enter 换行',
     },
     settings: {
       title: '设置',
@@ -79,6 +80,7 @@ const translations = {
       stop: 'Stop',
       thinking: 'Thinking...',
       attach: 'Attach',
+      sendHint: 'Ctrl/⌘ + Enter to send · Shift + Enter for newline',
     },
     settings: {
       title: 'Settings',
