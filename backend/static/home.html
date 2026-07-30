@@ -58,9 +58,15 @@
     <div id="messages" class="messages" role="log" aria-live="polite" aria-label="消息列表"></div>
 
     <div class="input-area" role="region" aria-label="消息输入">
+      <!-- 附件预览 -->
+      <div id="attachments-preview" class="attachments-preview" role="region" aria-label="附件预览"></div>
       <label for="user-input" class="visually-hidden">输入消息</label>
-      <textarea id="user-input" data-i18n-placeholder="chat.placeholder" placeholder="输入消息..." rows="3"
-        aria-label="消息输入"></textarea>
+      <div class="input-row">
+        <input type="file" id="file-input" multiple accept="image/*,.txt,.md,.json,.pdf,.csv,.log" style="display:none" aria-label="选择文件">
+        <button id="attach-btn" class="btn-secondary" aria-label="添加附件" data-i18n-aria-label="chat.attach">📎 附件</button>
+        <textarea id="user-input" data-i18n-placeholder="chat.placeholder" placeholder="输入消息..." rows="3"
+          aria-label="消息输入"></textarea>
+      </div>
       <div class="input-actions">
         <button id="stop-btn" class="btn-secondary" data-i18n="chat.stop" style="display:none" aria-label="停止生成">停止</button>
         <button id="send-btn" class="btn-primary" data-i18n="chat.send" aria-label="发送消息">发送</button>
@@ -70,8 +76,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" style="display:none"></div>
 
-  <script src="i18n.v4.js"></script>
-  <script src="app.v4.js"></script>
-  <script src="home.v4.js"></script>
+  <script src="i18n.v5.js"></script>
+  <script src="app.v5.js"></script>
+  <script src="home.v5.js"></script>
 </body>
 </html>

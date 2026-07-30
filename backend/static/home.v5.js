@@ -6,6 +6,8 @@ let configuredProviders = new Set();
 let currentStream = null;
 let activeConvId = null;
 let activeConvTitle = '';
+// 当前输入的附件：[{file_id, filename, mime_type, size, dataUrl?}]
+let pendingAttachments = [];
 
 const modelSel = document.getElementById('model-select');
 const modeSel = document.getElementById('mode-select');
@@ -20,6 +22,9 @@ const stopBtn = document.getElementById('stop-btn');
 const convTitleEl = document.getElementById('conv-title');
 const convIdLabelEl = document.getElementById('conv-id-label');
 const convNewBtn = document.getElementById('conv-new-btn');
+const fileInput = document.getElementById('file-input');
+const attachBtn = document.getElementById('attach-btn');
+const attachPreview = document.getElementById('attachments-preview');
 
 function getConvIdFromURL() {
   const params = new URLSearchParams(location.search);
@@ -89,6 +94,132 @@ async function init() {
       send();
     }
   });
+
+  // 附件按钮 → 触发隐藏的 file input
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFiles);
+  }
+}
+
+// 选文件后：上传 + 加到 pendingAttachments
+async function handleFiles(e) {
+  const files = Array.from(e.target.files || []);
+  e.target.value = ''; // 清空让同名文件可再选
+  for (const file of files) {
+    const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const isImage = file.type.startsWith('image/');
+    let dataUrl = null;
+    if (isImage) {
+      dataUrl = await readAsDataURL(file);
+    }
+    pendingAttachments.push({
+      tempId,
+      file_id: null,
+      filename: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      size: file.size,
+      dataUrl,
+      uploading: true,
+    });
+    renderAttachments();
+    try {
+      const resp = await App.fetch('/api/v1/files', {
+        method: 'POST',
+        body: (() => { const fd = new FormData(); fd.append('file', file); return fd; })(),
+      });
+      const idx = pendingAttachments.findIndex(a => a.tempId === tempId);
+      if (idx >= 0) {
+        pendingAttachments[idx].file_id = resp.id;
+        pendingAttachments[idx].uploading = false;
+      }
+    } catch (err) {
+      const idx = pendingAttachments.findIndex(a => a.tempId === tempId);
+      if (idx >= 0) {
+        pendingAttachments[idx].uploading = false;
+        pendingAttachments[idx].error = err.message;
+      }
+    }
+    renderAttachments();
+  }
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(fr.error || new Error('read fail'));
+    fr.readAsDataURL(file);
+  });
+}
+
+function renderAttachments() {
+  if (!attachPreview) return;
+  attachPreview.innerHTML = '';
+  for (const a of pendingAttachments) {
+    const chip = document.createElement('div');
+    chip.className = 'attach-chip' + (a.uploading ? ' attach-uploading' : '') + (a.error ? ' attach-error' : '');
+    const thumb = document.createElement('div');
+    thumb.className = 'attach-thumb';
+    if (a.dataUrl) {
+      const img = document.createElement('img');
+      img.src = a.dataUrl;
+      img.alt = a.filename;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      img.style.borderRadius = '4px';
+      thumb.appendChild(img);
+    } else {
+      thumb.textContent = iconForMime(a.mime_type);
+    }
+    chip.appendChild(thumb);
+    const name = document.createElement('span');
+    name.className = 'attach-name';
+    name.textContent = a.filename;
+    chip.appendChild(name);
+    const size = document.createElement('span');
+    size.className = 'attach-size';
+    size.textContent = formatSize(a.size);
+    chip.appendChild(size);
+    const rm = document.createElement('button');
+    rm.className = 'attach-remove';
+    rm.type = 'button';
+    rm.textContent = '×';
+    rm.title = '移除';
+    rm.addEventListener('click', () => {
+      pendingAttachments = pendingAttachments.filter(x => x.tempId !== a.tempId);
+      renderAttachments();
+    });
+    chip.appendChild(rm);
+    attachPreview.appendChild(chip);
+  }
+}
+
+function iconForMime(mime) {
+  if (mime.startsWith('image/')) return '🖼';
+  if (mime === 'application/pdf') return '📕';
+  if (mime.startsWith('text/')) return '📄';
+  if (mime.includes('json')) return '{ }';
+  return '📎';
+}
+
+function formatSize(n) {
+  if (n < 1024) return n + 'B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'K';
+  return (n / (1024 * 1024)).toFixed(1) + 'M';
+}
+
+// 取已成功上传的 file_id 列表
+function readyAttachmentIds() {
+  return pendingAttachments
+    .filter(a => a.file_id && !a.error)
+    .map(a => a.file_id);
+}
+
+function clearAttachments() {
+  pendingAttachments = [];
+  renderAttachments();
 }
 
 function updateModeUI() {
@@ -261,6 +392,7 @@ async function send() {
   if (!content) return;
 
   const mode = modeSel.value;
+  const atts = readyAttachmentIds();
 
   if (mode === 'compare') {
     const providers = getSelectedProviders();
@@ -268,7 +400,7 @@ async function send() {
       showToast('对比模式请至少选 2 个 provider');
       return;
     }
-    await sendCompare(content, providers);
+    await sendCompare(content, providers, atts);
     return;
   }
 
@@ -279,9 +411,11 @@ async function send() {
   messages.push({ role: 'user', content });
 
   const req = { model, messages, conv_id: activeConvId || undefined };
+  if (atts.length) req.attachments = atts;
 
-  addMessage('user', content);
+  addMessage('user', content, atts.length ? `[附件] ${atts.length} 个` : null);
   userInput.value = '';
+  clearAttachments();
   setStreaming(true);
   const placeholder = addMessage('assistant', I18n.t('chat.thinking'));
 
@@ -310,15 +444,17 @@ async function send() {
   currentStream = stream;
 }
 
-async function sendCompare(content, providers) {
-  addMessage('user', content);
+async function sendCompare(content, providers, atts) {
+  addMessage('user', content, atts.length ? `[附件] ${atts.length} 个` : null);
   userInput.value = '';
+  clearAttachments();
   setStreaming(true);
 
   const messages = [];
   const sysPrompt = App.getSystemPrompt();
   if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
   messages.push({ role: 'user', content });
+  if (atts.length) messages[messages.length - 1].attachments = atts;
 
   const firstConfiguredModel = models
     .filter(m => providers.includes(m.provider))

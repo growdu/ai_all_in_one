@@ -22,6 +22,7 @@ const translations = {
       send: '发送',
       stop: '停止',
       thinking: '思考中...',
+      attach: '附件',
     },
     settings: {
       title: '设置',
@@ -77,6 +78,7 @@ const translations = {
       send: 'Send',
       stop: 'Stop',
       thinking: 'Thinking...',
+      attach: 'Attach',
     },
     settings: {
       title: 'Settings',

@@ -71,6 +71,15 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Phase 1.1：附件预处理（file_id → 文本注入 messages）
+	// 顶层 req.Attachments 合并到最后一条 user 消息
+	if len(req.Attachments) > 0 {
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			if req.Messages[i].Role == "user" {
+				req.Messages[i].Attachments = append(req.Messages[i].Attachments, req.Attachments...)
+				break
+			}
+		}
+	}
 	if h.FileStore != nil {
 		prep := preprocessing.NewPreprocessor(h.FileStore, "default")
 		processed, _, err := prep.Process(r.Context(), req)

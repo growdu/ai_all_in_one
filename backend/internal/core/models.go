@@ -68,6 +68,9 @@ type ChatRequest struct {
 	// ConvID 可选：非空时把 user/assistant 消息自动写入该会话。
 	// 2.0 改为必填。详见 docs/frontend/03-web.md §3.4。
 	ConvID string `json:"conv_id,omitempty"`
+	// Attachments 顶层附件列表（前端便利字段）；
+	// 后端预处理时会合并到最后一条 user 消息的 Attachments 字段。
+	Attachments []string `json:"attachments,omitempty"`
 }
 
 // InputProcessing 输入处理选项（review C）
