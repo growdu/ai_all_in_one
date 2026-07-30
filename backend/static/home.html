@@ -45,6 +45,16 @@
       </select>
     </div>
 
+    <!-- Compare 模式多选（默认隐藏） -->
+    <div id="model-multi-wrap" class="model-multi-wrap" role="region" aria-label="选择对比 provider" style="display:none">
+      <div class="model-multi-head">
+        <span class="model-multi-title" data-i18n="compare.title">选择要对比的 provider（多选）</span>
+        <button id="model-multi-all" class="btn-secondary" data-i18n="compare.selectAll">全选已配</button>
+      </div>
+      <div id="model-multi-list" class="model-multi-list" role="group"></div>
+      <div id="model-multi-hint" class="multi-hint multi-hint-warn">请至少选 2 个已配 key 的 provider</div>
+    </div>
+
     <div id="messages" class="messages" role="log" aria-live="polite" aria-label="消息列表"></div>
 
     <div class="input-area" role="region" aria-label="消息输入">
@@ -60,8 +70,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" style="display:none"></div>
 
-  <script src="i18n.v2.js"></script>
-  <script src="app.v2.js"></script>
-  <script src="home.v2.js"></script>
+  <script src="i18n.v3.js"></script>
+  <script src="app.v3.js"></script>
+  <script src="home.v3.js"></script>
 </body>
 </html>

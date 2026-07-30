@@ -2,13 +2,17 @@
 // 详见 docs/frontend/03-web.md §3.1
 
 let models = [];
+let configuredProviders = new Set();
 let currentStream = null;
-// Phase 1.2：当前会话上下文
 let activeConvId = null;
 let activeConvTitle = '';
 
 const modelSel = document.getElementById('model-select');
 const modeSel = document.getElementById('mode-select');
+const modelMultiWrap = document.getElementById('model-multi-wrap');
+const modelMultiList = document.getElementById('model-multi-list');
+const modelMultiHint = document.getElementById('model-multi-hint');
+const modelMultiAllBtn = document.getElementById('model-multi-all');
 const messagesEl = document.getElementById('messages');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
@@ -17,14 +21,18 @@ const convTitleEl = document.getElementById('conv-title');
 const convIdLabelEl = document.getElementById('conv-id-label');
 const convNewBtn = document.getElementById('conv-new-btn');
 
-// 从 URL 拿 ?conv=<id>
 function getConvIdFromURL() {
   const params = new URLSearchParams(location.search);
   return params.get('conv') || '';
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
 async function init() {
-  // 加载模型
   try {
     const resp = await App.listModels();
     models = resp.models || [];
@@ -33,27 +41,37 @@ async function init() {
     return;
   }
 
-  // 填充 model select
+  try {
+    const resp = await App.listKeys();
+    configuredProviders = new Set(resp.providers || []);
+  } catch (e) {
+    configuredProviders = new Set();
+  }
+
   for (const m of models) {
     const opt = document.createElement('option');
     opt.value = m.id;
     opt.textContent = `${m.display_name} (${m.provider})`;
     modelSel.appendChild(opt);
   }
-
-  // 默认选第一个
   if (models.length) modelSel.value = models[0].id;
 
-  // Phase 1.2：加载或创建会话
+  renderModelMulti();
   await ensureActiveConv();
 
-  // mode 切换
-  modeSel.addEventListener('change', () => {
-    // single 模式 = 用具体 model；auto = model="auto"；compare = 加 compare 字段
-    // 这里前端简化：只根据 mode 调不同请求体
-  });
+  modeSel.addEventListener('change', updateModeUI);
+  updateModeUI();
 
-  // 按钮事件
+  if (modelMultiAllBtn) {
+    modelMultiAllBtn.addEventListener('click', () => {
+      const boxes = modelMultiList.querySelectorAll('input[type="checkbox"]');
+      boxes.forEach(cb => {
+        if (cb.dataset.configured === '1') cb.checked = true;
+      });
+      updateMultiHint();
+    });
+  }
+
   sendBtn.addEventListener('click', send);
   stopBtn.addEventListener('click', () => {
     if (currentStream) currentStream.close();
@@ -61,11 +79,8 @@ async function init() {
     setStreaming(false);
   });
 
-  // 新建会话按钮
   if (convNewBtn) {
-    convNewBtn.addEventListener('click', () => {
-      location.href = 'home.html';
-    });
+    convNewBtn.addEventListener('click', () => { location.href = 'home.html'; });
   }
 
   userInput.addEventListener('keydown', (e) => {
@@ -76,19 +91,70 @@ async function init() {
   });
 }
 
-// Phase 1.2：确保有 active conv —— URL 优先，否则新建一个
+function updateModeUI() {
+  const mode = modeSel.value;
+  if (mode === 'compare') {
+    modelSel.style.display = 'none';
+    if (modelMultiWrap) modelMultiWrap.style.display = 'flex';
+  } else {
+    modelSel.style.display = '';
+    if (modelMultiWrap) modelMultiWrap.style.display = 'none';
+  }
+}
+
+function renderModelMulti() {
+  if (!modelMultiList) return;
+  modelMultiList.innerHTML = '';
+  for (const m of models) {
+    const isConfigured = configuredProviders.has(m.provider);
+    const row = document.createElement('label');
+    row.className = 'multi-row' + (isConfigured ? '' : ' multi-unconfigured');
+    row.innerHTML = `
+      <input type="checkbox" value="${m.id}" data-provider="${m.provider}" data-configured="${isConfigured ? 1 : 0}">
+      <span class="multi-name">${escapeHtml(m.display_name)}</span>
+      <span class="multi-provider">${escapeHtml(m.provider)}</span>
+      <span class="multi-status">${isConfigured ? '✓' : '○'}</span>
+    `;
+    modelMultiList.appendChild(row);
+  }
+  modelMultiList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updateMultiHint);
+  });
+  updateMultiHint();
+}
+
+function getSelectedProviders() {
+  if (!modelMultiList) return [];
+  const boxes = modelMultiList.querySelectorAll('input[type="checkbox"]:checked');
+  const providers = new Set();
+  boxes.forEach(cb => providers.add(cb.dataset.provider));
+  return Array.from(providers);
+}
+
+function updateMultiHint() {
+  if (!modelMultiHint) return;
+  const n = getSelectedProviders().length;
+  if (n === 0) {
+    modelMultiHint.textContent = '请至少选 2 个已配 key 的 provider';
+    modelMultiHint.className = 'multi-hint multi-hint-warn';
+  } else if (n === 1) {
+    modelMultiHint.textContent = '已选 1 个，再选 1 个可对比';
+    modelMultiHint.className = 'multi-hint multi-hint-warn';
+  } else {
+    modelMultiHint.textContent = `已选 ${n} 个 provider，对比模式`;
+    modelMultiHint.className = 'multi-hint multi-hint-ok';
+  }
+}
+
 async function ensureActiveConv() {
   const urlConvId = getConvIdFromURL();
   if (urlConvId) {
-    // 加载已有会话
     try {
       const conv = await App.fetch('/api/v1/conversations/' + encodeURIComponent(urlConvId));
       activeConvId = conv.conversation.id;
       activeConvTitle = conv.conversation.title || '';
       updateConvBar();
-      // 渲染历史消息
       renderHistory(conv.messages || []);
-      // 恢复 mode/model 选择（1.0 简化：只恢复 model）
       if (conv.conversation.model && conv.conversation.model !== 'auto') {
         const opt = Array.from(modelSel.options).find(o => o.value === conv.conversation.model);
         if (opt) modelSel.value = opt.value;
@@ -96,11 +162,8 @@ async function ensureActiveConv() {
       return;
     } catch (e) {
       showToast('加载会话失败：' + e.message);
-      // fallback: 新建
     }
   }
-  // 新建会话（不立刻落库，等首次 send 时让后端落）
-  // 简化：前端立刻建，标题默认
   try {
     const defaultModel = models.length ? models[0].id : 'mock-echo';
     const c = await App.fetch('/api/v1/conversations', {
@@ -110,7 +173,6 @@ async function ensureActiveConv() {
     activeConvId = c.id;
     activeConvTitle = c.title || '新对话';
     updateConvBar();
-    // 更新 URL（不刷新页面）
     const u = new URL(location.href);
     u.searchParams.set('conv', activeConvId);
     history.replaceState(null, '', u.toString());
@@ -126,7 +188,6 @@ function updateConvBar() {
   }
 }
 
-// Phase 1.2：渲染历史消息
 function renderHistory(msgs) {
   messagesEl.innerHTML = '';
   for (const m of msgs) {
@@ -162,38 +223,56 @@ function addMessage(role, text, meta) {
   return el;
 }
 
+function addCompareResult(r) {
+  const el = document.createElement('div');
+  el.className = 'message compare-result' + (r.status === 'failed' ? ' error' : '');
+  const head = document.createElement('div');
+  head.className = 'compare-head';
+  head.innerHTML = `
+    <span class="compare-provider">${escapeHtml(r.provider)}</span>
+    <span class="compare-latency">${r.latency_ms}ms</span>
+    <span class="compare-status compare-status-${r.status}">${r.status}</span>
+  `;
+  el.appendChild(head);
+  const body = document.createElement('div');
+  body.className = 'compare-body';
+  if (r.status === 'succeeded') {
+    body.textContent = r.content || '(空响应)';
+  } else {
+    body.textContent = r.error?.message || '失败';
+  }
+  el.appendChild(body);
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return el;
+}
+
 async function send() {
   const content = userInput.value.trim();
   if (!content) return;
 
   const mode = modeSel.value;
-  const model = mode === 'auto' ? 'auto' : modelSel.value;
-
-  // 构造请求
-  const messages = [];
-  const sysPrompt = App.getSystemPrompt();
-  if (sysPrompt) {
-    messages.push({ role: 'system', content: sysPrompt });
-  }
-  messages.push({ role: 'user', content });
-
-  // Phase 1.2：附带 conv_id 让后端自动落消息
-  const req = { model, messages, conv_id: activeConvId || undefined };
 
   if (mode === 'compare') {
-    // compare 模式：1.0 不支持 stream，并行发 N 个
-    await sendCompare(req);
+    const providers = getSelectedProviders();
+    if (providers.length < 2) {
+      showToast('对比模式请至少选 2 个 provider');
+      return;
+    }
+    await sendCompare(content, providers);
     return;
   }
 
+  const model = mode === 'auto' ? 'auto' : modelSel.value;
+  const messages = [];
+  const sysPrompt = App.getSystemPrompt();
+  if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
+  messages.push({ role: 'user', content });
+
+  const req = { model, messages, conv_id: activeConvId || undefined };
+
   addMessage('user', content);
   userInput.value = '';
-
-  // single / auto 模式
-  if (mode === 'auto') {
-    // auto: model="auto" 后端选
-  }
-
   setStreaming(true);
   const placeholder = addMessage('assistant', I18n.t('chat.thinking'));
 
@@ -201,13 +280,11 @@ async function send() {
     (chunk) => {
       placeholder.textContent = (placeholder.textContent === I18n.t('chat.thinking') ? '' : placeholder.textContent) + chunk.delta;
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      if (chunk.finish_reason === 'stop') {
-        if (chunk.usage) {
-          const meta = document.createElement('div');
-          meta.className = 'meta';
-          meta.textContent = `${chunk.id} · ${chunk.usage.total_tokens} tokens`;
-          placeholder.appendChild(meta);
-        }
+      if (chunk.finish_reason === 'stop' && chunk.usage) {
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `${chunk.id} · ${chunk.usage.total_tokens} tokens`;
+        placeholder.appendChild(meta);
       }
     },
     (err) => {
@@ -218,17 +295,51 @@ async function send() {
     () => {
       setStreaming(false);
       currentStream = null;
-      // Phase 1.2：第一条 user 后，自动用前 16 字生成 title
       maybeUpdateConvTitle();
     }
   );
   currentStream = stream;
 }
 
-// Phase 1.2：第一次 send 后，把标题更新为 user 内容的前 16 字（一次性）
+async function sendCompare(content, providers) {
+  addMessage('user', content);
+  userInput.value = '';
+  setStreaming(true);
+
+  const messages = [];
+  const sysPrompt = App.getSystemPrompt();
+  if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
+  messages.push({ role: 'user', content });
+
+  const firstConfiguredModel = models
+    .filter(m => providers.includes(m.provider))
+    .map(m => m.id)[0] || 'mock-echo';
+
+  const req = {
+    model: firstConfiguredModel,
+    messages,
+    conv_id: activeConvId || undefined,
+    compare: { providers, format: 'stacked' },
+  };
+
+  try {
+    const resp = await App.chat(req);
+    const results = resp.compare?.results || [];
+    if (!results.length) {
+      addMessage('error', '对比模式无返回结果');
+    }
+    for (const r of results) {
+      addCompareResult(r);
+    }
+    maybeUpdateConvTitle();
+  } catch (e) {
+    addMessage('error', 'compare 失败：' + e.message);
+  }
+  setStreaming(false);
+}
+
 async function maybeUpdateConvTitle() {
   if (!activeConvId || activeConvTitle !== '新对话') return;
-  // 找最后一条 user 消息
   const userMsgs = Array.from(messagesEl.querySelectorAll('.message.user'));
   const last = userMsgs[userMsgs.length - 1];
   if (!last) return;
@@ -243,38 +354,6 @@ async function maybeUpdateConvTitle() {
     activeConvTitle = newTitle;
     updateConvBar();
   } catch (_) {}
-}
-
-async function sendCompare(req) {
-  addMessage('user', req.messages[req.messages.length - 1].content);
-  userInput.value = '';
-  setStreaming(true);
-
-  // 1.0 简化：只列已配 key 的 provider
-  let configured = [];
-  try {
-    const keys = await App.listKeys();
-    configured = keys.providers || [];
-  } catch (e) {}
-
-  req.model = req.model === 'auto' ? 'mock-echo' : req.model; // dummy
-  req.compare = { providers: configured.length ? configured : ['mock', 'slow'], format: 'stacked' };
-
-  try {
-    const resp = await App.chat(req);
-    const results = resp.compare?.results || [];
-    for (const r of results) {
-      const el = addMessage('assistant',
-        r.status === 'succeeded' ? r.content : `[${r.provider}] ${r.error?.message || '失败'}`,
-        `${r.provider} · ${r.latency_ms}ms · ${r.status}`);
-      if (r.status === 'succeeded') el.className = 'message assistant';
-      else el.className = 'message error';
-    }
-    maybeUpdateConvTitle();
-  } catch (e) {
-    addMessage('error', 'compare 失败：' + e.message);
-  }
-  setStreaming(false);
 }
 
 document.addEventListener('DOMContentLoaded', init);

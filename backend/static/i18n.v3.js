@@ -16,6 +16,7 @@ const translations = {
     },
     home: { title: '对话' },
     mode: { single: '单个', auto: '自动选', compare: '对比' },
+    compare: { title: '选择要对比的 provider（多选）', selectAll: '全选已配' },
     chat: {
       placeholder: '输入消息...',
       send: '发送',
@@ -70,6 +71,7 @@ const translations = {
     },
     home: { title: 'Chat' },
     mode: { single: 'Single', auto: 'Auto', compare: 'Compare' },
+    compare: { title: 'Select providers to compare (multi)', selectAll: 'Select all configured' },
     chat: {
       placeholder: 'Type a message...',
       send: 'Send',
