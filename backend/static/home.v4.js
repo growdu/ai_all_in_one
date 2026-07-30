@@ -223,28 +223,37 @@ function addMessage(role, text, meta) {
   return el;
 }
 
-function addCompareResult(r) {
-  const el = document.createElement('div');
-  el.className = 'message compare-result' + (r.status === 'failed' ? ' error' : '');
-  const head = document.createElement('div');
-  head.className = 'compare-head';
-  head.innerHTML = `
-    <span class="compare-provider">${escapeHtml(r.provider)}</span>
-    <span class="compare-latency">${r.latency_ms}ms</span>
-    <span class="compare-status compare-status-${r.status}">${r.status}</span>
-  `;
-  el.appendChild(head);
-  const body = document.createElement('div');
-  body.className = 'compare-body';
-  if (r.status === 'succeeded') {
-    body.textContent = r.content || '(空响应)';
-  } else {
-    body.textContent = r.error?.message || '失败';
+function addCompareResults(results) {
+  // 删除旧 grid（如有）
+  const old = messagesEl.querySelector('.compare-grid');
+  if (old) old.remove();
+
+  const grid = document.createElement('div');
+  grid.className = 'compare-grid';
+  for (const r of results) {
+    const el = document.createElement('div');
+    el.className = 'compare-result' + (r.status === 'failed' ? ' error' : '');
+    const head = document.createElement('div');
+    head.className = 'compare-head';
+    head.innerHTML = `
+      <span class="compare-provider">${escapeHtml(r.provider)}</span>
+      <span class="compare-latency">${r.latency_ms}ms</span>
+      <span class="compare-status compare-status-${r.status}">${r.status}</span>
+    `;
+    el.appendChild(head);
+    const body = document.createElement('div');
+    body.className = 'compare-body';
+    if (r.status === 'succeeded') {
+      body.textContent = r.content || '(空响应)';
+    } else {
+      body.textContent = r.error?.message || '失败';
+    }
+    el.appendChild(body);
+    grid.appendChild(el);
   }
-  el.appendChild(body);
-  messagesEl.appendChild(el);
+  messagesEl.appendChild(grid);
   messagesEl.scrollTop = messagesEl.scrollHeight;
-  return el;
+  return grid;
 }
 
 async function send() {
@@ -328,9 +337,7 @@ async function sendCompare(content, providers) {
     if (!results.length) {
       addMessage('error', '对比模式无返回结果');
     }
-    for (const r of results) {
-      addCompareResult(r);
-    }
+    addCompareResults(results);
     maybeUpdateConvTitle();
   } catch (e) {
     addMessage('error', 'compare 失败：' + e.message);
