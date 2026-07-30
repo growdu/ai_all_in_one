@@ -34,12 +34,15 @@ const placeholderUserKey = "PLACEHOLDER_USER_KEY"
 //   - 流式透传：SSE chunk 直接转给上游，OpenAI 兼容格式
 //   - 错误：统一 ErrorResponse 结构（docs/api/01-protocol.md §四）
 type ChatHandler struct {
-	Logger    *slog.Logger
-	Registry  *core.Registry
-	AuthToken string         // 1.0 简化：非空即要求；2.0 接 JWT
-	Router    *routing.Router // single 模式可空，auto/compare 必须
-	Keyring   *security.Keyring // 1.0 简化：nil 时 fallback placeholder
-	FileStore *storage.FileStore  // Phase 1.1：附件注入；nil 时跳过
+	Logger      *slog.Logger
+	Registry    *core.Registry
+	AuthToken   string         // 1.0 简化：非空即要求；2.0 接 JWT
+	Router      *routing.Router // single 模式可空，auto/compare 必须
+	Keyring     *security.Keyring // 1.0 简化：nil 时 fallback placeholder
+	FileStore   *storage.FileStore  // Phase 1.1：附件注入；nil 时跳过
+	MsgRepo     *storage.MsgRepo    // Phase 1.2：自动落消息；nil 时跳过
+	ConvRepo    *storage.ConvRepo   // Phase 1.2：校验 conv 归属；nil 时跳过
+	DefaultUser string             // 1.0 简化：单用户
 }
 
 func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +79,16 @@ func (h *ChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.Messages = processed.Messages
+	}
+
+	// Phase 1.2：自动落消息 + 校验 conv 归属
+	//   - 有 ConvID 时：校验存在+owner；落 user msg；落 assistant msg
+	//   - 无 ConvID 时：跳过所有持久化（保持 1.0 兼容）
+	if h.persistEnabled() && req.ConvID != "" {
+		if err := h.verifyConv(req.ConvID); err != nil {
+			writeError(w, http.StatusNotFound, "conv_not_found", err.Error(), "", 0)
+			return
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
@@ -127,6 +140,57 @@ func (h *ChatHandler) userKeyFor(provider string) (string, error) {
 		return "", fmt.Errorf("no key configured for provider %q, please add one in Settings", provider)
 	}
 	return key, nil
+}
+
+// persistEnabled Phase 1.2：MsgRepo + ConvRepo 都配置时才启用持久化
+func (h *ChatHandler) persistEnabled() bool {
+	return h.MsgRepo != nil && h.ConvRepo != nil
+}
+
+// ownerID Phase 1.2：1.0 单用户，固定 default
+func (h *ChatHandler) ownerID() string {
+	if h.DefaultUser == "" {
+		return "default"
+	}
+	return h.DefaultUser
+}
+
+// verifyConv Phase 1.2：校验 conv 归属当前 owner
+func (h *ChatHandler) verifyConv(convID string) error {
+	_, err := h.ConvRepo.Get(convID, h.ownerID())
+	return err
+}
+
+// lastUserMessage Phase 1.2：取最后一条 user 消息
+func (h *ChatHandler) lastUserMessage(req core.ChatRequest) (content string, attachments []string) {
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == "user" {
+			return req.Messages[i].Content, req.Messages[i].Attachments
+		}
+	}
+	return "", nil
+}
+
+// persistUserMessage Phase 1.2：落 user msg
+func (h *ChatHandler) persistUserMessage(req core.ChatRequest) error {
+	if !h.persistEnabled() || req.ConvID == "" {
+		return nil
+	}
+	content, atts := h.lastUserMessage(req)
+	if content == "" && len(atts) == 0 {
+		return nil
+	}
+	_, err := h.MsgRepo.Append(req.ConvID, h.ownerID(), "user", content, atts)
+	return err
+}
+
+// persistAssistantMessage Phase 1.2：落 assistant msg（final）
+func (h *ChatHandler) persistAssistantMessage(convID, content string) error {
+	if !h.persistEnabled() || convID == "" || content == "" {
+		return nil
+	}
+	_, err := h.MsgRepo.Append(convID, h.ownerID(), "assistant", content, nil)
+	return err
 }
 
 // serveAuto auto 模式：打分选 1 + 失败 fallback
@@ -228,10 +292,21 @@ func firstModelOfProvider(reg *core.Registry, name string) string {
 }
 
 func (h *ChatHandler) serveComplete(ctx context.Context, w http.ResponseWriter, provider core.ChatProvider, req core.ChatRequest, userKey string) {
+	// Phase 1.2：落 user msg
+	if err := h.persistUserMessage(req); err != nil {
+		// 持久化失败不阻塞 chat，仅 log
+		if h.Logger != nil {
+			h.Logger.Warn("persist user msg failed", "conv_id", req.ConvID, "err", err)
+		}
+	}
 	resp, err := provider.ChatComplete(ctx, req, userKey)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "provider_error", err.Error(), provider.Name(), 0)
 		return
+	}
+	// Phase 1.2：落 assistant msg
+	if perr := h.persistAssistantMessage(req.ConvID, resp.Content); perr != nil && h.Logger != nil {
+		h.Logger.Warn("persist assistant msg failed", "conv_id", req.ConvID, "err", perr)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -240,6 +315,10 @@ func (h *ChatHandler) serveComplete(ctx context.Context, w http.ResponseWriter, 
 }
 
 func (h *ChatHandler) serveStream(ctx context.Context, w http.ResponseWriter, provider core.ChatProvider, req core.ChatRequest, userKey string) {
+	// Phase 1.2：落 user msg
+	if err := h.persistUserMessage(req); err != nil && h.Logger != nil {
+		h.Logger.Warn("persist user msg failed", "conv_id", req.ConvID, "err", err)
+	}
 	chunks, errs, closer, err := provider.ChatStream(ctx, req, userKey)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "provider_error", err.Error(), provider.Name(), 0)
@@ -264,6 +343,8 @@ func (h *ChatHandler) serveStream(ctx context.Context, w http.ResponseWriter, pr
 
 	totalPrompt, totalCompletion := 0, 0
 	sentAny := false
+	// Phase 1.2：累积 assistant 文本，stream 结束时落库
+	var assistantBuf strings.Builder
 	for {
 		select {
 		case chunk, ok := <-chunks:
@@ -274,12 +355,20 @@ func (h *ChatHandler) serveStream(ctx context.Context, w http.ResponseWriter, pr
 				f.Flush()
 			}
 				observability.RecordChat(provider.Name(), req.Model, sentAny, totalPrompt, totalCompletion)
+				// Phase 1.2：落 assistant msg
+				if perr := h.persistAssistantMessage(req.ConvID, assistantBuf.String()); perr != nil && h.Logger != nil {
+					h.Logger.Warn("persist assistant msg failed", "conv_id", req.ConvID, "err", perr)
+				}
 				return
 			}
 			sentAny = true
 			if chunk.Usage != nil {
 				totalPrompt = chunk.Usage.PromptTokens
 				totalCompletion = chunk.Usage.CompletionTokens
+			}
+			// Phase 1.2：累积 delta
+			if chunk.Delta != "" {
+				assistantBuf.WriteString(chunk.Delta)
 			}
 			data, _ := json.Marshal(chunk)
 			fmt.Fprintf(w, "data: %s\n\n", data)

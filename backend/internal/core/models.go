@@ -65,6 +65,9 @@ type ChatRequest struct {
 	// 本系统扩展
 	InputProcessing *InputProcessing `json:"input_processing,omitempty"`
 	Compare         *CompareSpec     `json:"compare,omitempty"`
+	// ConvID 可选：非空时把 user/assistant 消息自动写入该会话。
+	// 2.0 改为必填。详见 docs/frontend/03-web.md §3.4。
+	ConvID string `json:"conv_id,omitempty"`
 }
 
 // InputProcessing 输入处理选项（review C）

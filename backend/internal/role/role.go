@@ -82,13 +82,20 @@ func RunMaster(cfg *config.Config, logger *slog.Logger) error {
 	mux.Handle("/api/v1/conversations", &api.ConvsHandler{Store: fileStore, DefaultUser: "default"})
 	mux.Handle("/api/v1/conversations/", &api.ConvItemHandler{Store: fileStore, DefaultUser: "default"})
 
+	// Phase 1.2：自动落消息 repo
+	msgRepo := storage.NewMsgRepo(fileStore)
+	convRepo := storage.NewConvRepo(fileStore)
+
 	mux.Handle("/api/v1/chat/completions", &api.ChatHandler{
-		Logger:    logger,
-		Registry:  reg,
-		Router:    router,
-		Keyring:   keyring,
-		FileStore: fileStore,
-		AuthToken: os.Getenv("AIIO_AUTH_TOKEN"),
+		Logger:      logger,
+		Registry:    reg,
+		Router:      router,
+		Keyring:     keyring,
+		FileStore:   fileStore,
+		MsgRepo:     msgRepo,
+		ConvRepo:    convRepo,
+		DefaultUser: "default",
+		AuthToken:   os.Getenv("AIIO_AUTH_TOKEN"),
 	})
 
 	handler := observability.LogRequest(logger, mux)
