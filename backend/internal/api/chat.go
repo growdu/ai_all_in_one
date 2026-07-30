@@ -255,8 +255,8 @@ func (h *ChatHandler) serveCompare(ctx context.Context, w http.ResponseWriter, r
 	if len(candidates) == 0 {
 		candidates = h.Registry.ChatProviders()
 	}
-	if len(candidates) < 2 {
-		writeError(w, http.StatusBadRequest, "only_one_provider", "compare requires >= 2 providers", "", 0)
+	if len(candidates) < 1 {
+		writeError(w, http.StatusBadRequest, "no_provider", "compare requires >= 1 provider", "", 0)
 		return
 	}
 

@@ -130,8 +130,8 @@ type CompareResult struct {
 // Compare 并行发 N 个 Provider
 // keyFor 是回调：从 provider 名取 user key
 func (r *Router) Compare(ctx context.Context, req core.ChatRequest, candidates []string, userKey string, keyFor func(string) (string, error)) ([]CompareResult, error) {
-	if len(candidates) < 2 {
-		return nil, errors.New("only_one_provider")
+	if len(candidates) < 1 {
+		return nil, errors.New("no_provider")
 	}
 	results := make([]CompareResult, len(candidates))
 	var wg sync.WaitGroup
